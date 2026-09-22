@@ -113,7 +113,7 @@ class KeywordsAndCapabilities(Fixture):
         self.assertFalse(should_handle(self.e(text='瑟瑟'),self.cfg,self.bot.store))
         result=self.bot.process(self.e(text='瑟瑟'),'jobkw3')
         self.assertEqual(result[0]['text'],'测试回答')
-        self.assertIn('你是用户的中文QQ助手',self.bot.llm.chat.call_args[0][1][0]['content'])
+        self.assertIn('小杂鱼',self.bot.llm.chat.call_args[0][1][0]['content'])
     def test_files_cap_off_ignores_files(self):
         self.bot.store.set('g:33333','cap:files',False)
         e=self.e(segments=[{'type':'file','data':{'file_id':'x','name':'a.txt'}}])

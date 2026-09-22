@@ -81,6 +81,19 @@ class RoleCommands(Fixture):
         prompt = self.bot.llm.chat.call_args[0][1][0]['content']
         self.assertIn('可靠、自然的中文QQ助手', prompt)
 
+    def test_group_role_covers_ordinary_chat_without_keyword(self):
+        self.bot.llm.chat.return_value = '杂鱼~连招呼都这么普通。'
+        self.bot.process(self.e(text='你好'), 'role-ordinary-reply')
+        prompt = self.bot.llm.chat.call_args[0][1][0]['content']
+        self.assertIn('小杂鱼', prompt)
+        self.assertIn('理论王者、实战青铜', prompt)
+
+    def test_private_ordinary_chat_keeps_generic_assistant(self):
+        self.bot.process(self.e(group=None, text='你好'), 'role-private-generic')
+        prompt = self.bot.llm.chat.call_args[0][1][0]['content']
+        self.assertIn('你是用户的中文QQ助手', prompt)
+        self.assertNotIn('理论王者、实战青铜', prompt)
+
     def test_group_selection_is_isolated(self):
         self.admin('/角色 normal', group=33333, ident='role-a')
         self.assertEqual(persona.role_for(self.bot.store, 'g:33333').id, 'normal')
