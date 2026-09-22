@@ -140,11 +140,18 @@ def _validate(card, corpus, directory):
         raise RoleCardError(f'{directory.name}: corpus categories are required')
     if not all(_string_list(items) for items in corpus['categories'].values()):
         raise RoleCardError(f'{directory.name}: corpus categories must contain strings')
-    if not _string_list(corpus.get('fallbacks')):
+    fallbacks = corpus.get('fallbacks')
+    if isinstance(fallbacks, dict):
+        if not _string_list(fallbacks.get('generic')) or not all(_string_list(items) for items in fallbacks.values()):
+            raise RoleCardError(f'{directory.name}: fallback dictionary requires non-empty string lists')
+    elif not _string_list(fallbacks):
         raise RoleCardError(f'{directory.name}: at least one fallback is required')
     plans = corpus.get('plans')
     if not isinstance(plans, dict) or states['default'] not in plans:
         raise RoleCardError(f'{directory.name}: corpus plan for default state is required')
+    intent_plans = corpus.get('intent_plans')
+    if intent_plans is not None and not isinstance(intent_plans, dict):
+        raise RoleCardError(f'{directory.name}: intent_plans must be an object when present')
 
 
 def load_role(directory):

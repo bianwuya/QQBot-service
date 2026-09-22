@@ -29,7 +29,9 @@ SURFACE = XIAOZAYU.data['surface']+' '+XIAOZAYU.data['speech_style']
 REACTION_CHAIN = XIAOZAYU.states.get('reaction_chain', '')
 CORPUS = XIAOZAYU.corpus['categories']
 OOC_WORDS = tuple(XIAOZAYU.data.get('ooc_words', []))
-FALLBACKS = list(XIAOZAYU.corpus['fallbacks'])
+_FALLBACK_SOURCE = XIAOZAYU.corpus['fallbacks']
+FALLBACKS = (list(_FALLBACK_SOURCE.get('generic', [])) if isinstance(_FALLBACK_SOURCE, dict)
+             else list(_FALLBACK_SOURCE))
 FLIRT_WORDS = tuple(XIAOZAYU.triggers.get('flirt', []))
 INSULT_WORDS = tuple(XIAOZAYU.triggers.get('insult', []))
 FR_ROUNDS = int(XIAOZAYU.states.get('trigger_rounds', 0))
@@ -67,12 +69,12 @@ def ooc_check(text, role=None):
     return _ooc_check(role or XIAOZAYU, text)
 
 
-def fallback_line(used, role=None):
-    return _fallback_line(role or XIAOZAYU, used)
+def fallback_line(used, role=None, intent=None):
+    return _fallback_line(role or XIAOZAYU, used, intent)
 
 
-def examples_for(mode, used, role=None):
-    return _examples_for(role or XIAOZAYU, mode, used)
+def examples_for(mode, used, role=None, intent=None):
+    return _examples_for(role or XIAOZAYU, mode, used, intent)
 
 
 def relation_level(affinity, role=None):

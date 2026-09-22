@@ -34,9 +34,15 @@ def ooc_check(role, text):
     return any(word in (text or '') for word in role.data.get('ooc_words', []))
 
 
-def fallback_line(role, used):
+def fallback_line(role, used, intent=None):
     fallbacks = role.corpus['fallbacks']
-    return next((line for line in fallbacks if line not in used), fallbacks[0])
+    if isinstance(fallbacks, dict):
+        pool = fallbacks.get(intent) if isinstance(intent, str) else None
+        if not pool:
+            pool = fallbacks.get('generic') or []
+    else:
+        pool = fallbacks
+    return next((line for line in pool if line not in used), pool[0])
 
 
 def _pick(role, category, used, count):
@@ -45,11 +51,13 @@ def _pick(role, category, used, count):
     return pool[:count]
 
 
-def examples_for(role, mode, used):
+def examples_for(role, mode, used, intent=None):
     plans = role.corpus.get('plans', {})
     plan = plans.get(mode) or plans.get(role.states['default']) or []
+    intent_plans = role.corpus.get('intent_plans', {})
+    intent_plan = intent_plans.get(intent) if isinstance(intent, str) else None
     chosen = []
-    for entry in plan:
+    for entry in list(plan) + list(intent_plan or []):
         if not isinstance(entry, list) or len(entry) != 2:
             continue
         category, count = entry

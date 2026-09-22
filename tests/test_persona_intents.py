@@ -43,7 +43,7 @@ class PersonaIntents(unittest.TestCase):
 
     def test_flirt_and_insult_use_role_triggers(self):
         self.assertEqual(classify(XIAOZAYU, '你真可爱'), 'flirt')
-        self.assertEqual(classify(XIAOZAYU, '这破 Bot 真笨'), 'chat')
+        self.assertEqual(classify(XIAOZAYU, '这破 Bot 真笨'), 'insult')
         self.assertEqual(classify(NORMAL, '你真可爱'), 'chat')
 
     def test_greeting(self):
