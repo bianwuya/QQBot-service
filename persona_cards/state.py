@@ -1,4 +1,6 @@
 """Role selection and per-scope runtime-state helpers."""
+import time
+
 from .engine import trigger_hit
 
 
@@ -123,3 +125,30 @@ def finish_turn(role, state, triggered):
         left = max(0, int(state.get('left', 0))-1)
         return {'mode': trigger_mode if left else role.states['default'], 'left': left}
     return state
+
+IDENTITY_PROBE_KEY = 'persona_identity_probe'
+
+
+def load_identity_probe(store, scope, owner):
+    probes = store.get(scope, IDENTITY_PROBE_KEY)
+    if not isinstance(probes, dict):
+        probes = {}
+    probe = probes.get(owner)
+    if not isinstance(probe, dict):
+        probe = {}
+    day = time.strftime('%Y-%m-%d')
+    if probe.get('day') != day:
+        return {'n': 0, 'day': day}
+    return {'n': max(0, int(probe.get('n', 0))), 'day': day}
+
+
+def note_identity_probe(store, scope, owner):
+    probe = load_identity_probe(store, scope, owner)
+    probe = {'n': probe['n']+1, 'day': time.strftime('%Y-%m-%d')}
+    probes = store.get(scope, IDENTITY_PROBE_KEY)
+    if not isinstance(probes, dict):
+        probes = {}
+    probes[owner] = probe
+    store.set(scope, IDENTITY_PROBE_KEY, probes)
+    return probe
+

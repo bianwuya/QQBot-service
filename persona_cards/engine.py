@@ -123,11 +123,14 @@ def _pick(role, category, used, count):
     return pool[:count]
 
 
-def examples_for(role, mode, used, intent=None):
+def examples_for(role, mode, used, intent=None, identity_path=None):
     plans = role.corpus.get('plans', {})
     plan = plans.get(mode) or plans.get(role.states['default']) or []
     intent_plans = role.corpus.get('intent_plans', {})
     intent_plan = intent_plans.get(intent) if isinstance(intent, str) else None
+    if intent == 'identity' and identity_path in ('deflect', 'admit'):
+        category = 'identity_deflect' if identity_path == 'deflect' else 'honest_admit'
+        intent_plan = [[category, 2 if identity_path == 'deflect' else 1]]
     chosen = []
     for entry in list(plan) + list(intent_plan or []):
         if not isinstance(entry, list) or len(entry) != 2:
@@ -173,7 +176,8 @@ def build_prompt(role, state, relation, context):
     mode = state.get('mode', role.states['default']) if isinstance(state, dict) else role.states['default']
     if mode not in role.states['modes']:
         mode = role.states['default']
-    state_label, corpus_block, chosen = examples_for(role, mode, used)
+    state_label, corpus_block, chosen = examples_for(
+        role, mode, used, context.get('intent'), context.get('identity_path'))
     mood_line = str(context.get('mood_line', '')).strip()
     if mood_line:
         state_label += '\n'+mood_line

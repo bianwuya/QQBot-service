@@ -7,11 +7,14 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            fallback_line as _fallback_line,
                            finish_turn as _finish_turn, load_catalog,
                            classify as _classify_intent,
+                           serious_marker_hit as _serious_marker_hit,
                            limit_for as _limit_for,
                            finish_mood as _finish_mood,
                            load_mood as _load_mood,
+                           load_identity_probe as _load_identity_probe,
                            load_runtime as _load_runtime,
                            mood_line as _mood_line,
+                           note_identity_probe as _note_identity_probe,
                            ooc_check as _ooc_check,
                            ooc_scan as _ooc_scan,
                            relation_level as _relation_level,
@@ -138,3 +141,15 @@ def finish_mood(store, scope, role, mood, triggered, intent=None):
 
 def reply_limit(role, intent=None):
     return _limit_for(role, intent) if intent is not None else _reply_limit(role)
+
+def serious_marker_hit(role, text):
+    return _serious_marker_hit(role, text)
+
+
+def identity_probe(store, scope, owner):
+    return _load_identity_probe(store, scope, owner)
+
+
+def note_identity_probe(store, scope, owner):
+    return _note_identity_probe(store, scope, owner)
+
