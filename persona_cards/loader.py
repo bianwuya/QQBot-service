@@ -136,6 +136,9 @@ def _validate(card, corpus, directory):
     intents = card.get('intents')
     if intents is not None and (not isinstance(intents, dict) or not all(isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value) for value in intents.values())):
         raise RoleCardError(f'{directory.name}: intents must map names to non-empty string lists')
+    behaviors = card.get('behaviors')
+    if behaviors is not None and (not isinstance(behaviors, dict) or not all(isinstance(key, str) and isinstance(value, str) and value.strip() for key, value in behaviors.items())):
+        raise RoleCardError(f'{directory.name}: behaviors must map intent names to non-empty rules')
     if not isinstance(corpus, dict) or not isinstance(corpus.get('categories'), dict):
         raise RoleCardError(f'{directory.name}: corpus categories are required')
     if not all(_string_list(items) for items in corpus['categories'].values()):

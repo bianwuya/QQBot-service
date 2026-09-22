@@ -30,6 +30,22 @@ def output_instruction(role, intent=None):
     return lead + base + '。'
 
 
+def behavior_block(role, intent=None):
+    behaviors = role.data.get('behaviors')
+    if not isinstance(behaviors, dict) or not behaviors:
+        return role.data['social_behavior']
+    current = behaviors.get(intent) or behaviors.get('chat') or role.data['social_behavior']
+    order = ('greeting', 'tech_help', 'emotional', 'uncertain', 'correction',
+             'clarify', 'identity', 'memory', 'boundary', 'chat', 'flirt', 'insult')
+    index = []
+    for name in order:
+        if name == intent or name not in behaviors:
+            continue
+        summary = behaviors[name].replace('。', '；').split('；')[0]
+        index.append(name+'：'+summary)
+    return current + ('\n其他情境索引：' + '；'.join(index) if index else '')
+
+
 def ooc_check(role, text):
     return any(word in (text or '') for word in role.data.get('ooc_words', []))
 
@@ -117,6 +133,7 @@ def build_prompt(role, state, relation, context):
         'ooc_words': '／'.join(role.data.get('ooc_words', [])) or '不得跳出角色自述模型身份',
         'memory': memory,
         'social_behavior': role.data['social_behavior'],
+        'behavior_block': behavior_block(role, context.get('intent')),
         'memory_behavior': role.data['memory_behavior'],
         'output_instruction': output_instruction(role, context.get('intent')),
     }

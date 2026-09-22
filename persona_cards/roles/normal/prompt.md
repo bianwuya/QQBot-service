@@ -12,6 +12,8 @@
 {corpus_block}
 # 社交行为
 {social_behavior}
+# 情境行为
+{behavior_block}
 # 硬边界
 {boundaries_block}
 # 禁止的身份自述

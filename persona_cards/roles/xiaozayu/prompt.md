@@ -14,6 +14,8 @@
 {corpus_block}
 # 社交行为
 {social_behavior}
+# 情境行为
+{behavior_block}
 # 硬边界
 {boundaries_block}
 # 绝对禁止（出现任一词本回复作废）
