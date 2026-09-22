@@ -54,6 +54,7 @@ ZIP格式为AES-256，随机12位密码。文件名示例：`报告_密码-aB3cD
 ## 配置与凭据
 
 - `config.json`：本机专用，不提交版本控制。
+- 出口防护 safe_net 用公共 DoH（1.1.1.1、223.5.5.5，IP 字面直连）做解析兜底：本机开启代理 fake-IP/TUN 模式后仍能解析平台域名；内网、保留地址和云元数据依旧全部拦截，且只在系统解析整体不可用时才启用。
 - Sub2API Key 从 `F:/Apps/Sub2API/native/.gwkey-current` 读取，不复制进源码。
 - 当前已验证默认模型：`deepseek-v4-flash-ga-260731`。其他列表项需要使用时再验证；不自动更改网关账号或渠道。
 - 管理员模型和角色选择、长期记忆档案持久化在 `state/bot.sqlite3`。内置角色卡位于 `persona_cards/roles/`；长期记忆按 `scope + owner` 隔离。
