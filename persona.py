@@ -13,6 +13,7 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            load_runtime as _load_runtime,
                            mood_line as _mood_line,
                            ooc_check as _ooc_check,
+                           ooc_scan as _ooc_scan,
                            relation_level as _relation_level,
                            reply_limit as _reply_limit,
                            resolve_role as _resolve_role,
@@ -31,7 +32,8 @@ CORE = XIAOZAYU.data['core']
 SURFACE = XIAOZAYU.data['surface']+' '+XIAOZAYU.data['speech_style']
 REACTION_CHAIN = XIAOZAYU.states.get('reaction_chain', '')
 CORPUS = XIAOZAYU.corpus['categories']
-OOC_WORDS = tuple(XIAOZAYU.data.get('ooc_words', []))
+OOC_WORDS = tuple((XIAOZAYU.data.get('ooc') or {}).get('hard')
+                 or XIAOZAYU.data.get('ooc_words', []))
 _FALLBACK_SOURCE = XIAOZAYU.corpus['fallbacks']
 FALLBACKS = (list(_FALLBACK_SOURCE.get('generic', [])) if isinstance(_FALLBACK_SOURCE, dict)
              else list(_FALLBACK_SOURCE))
@@ -70,6 +72,10 @@ def insult_hit(text, role=None):
 
 def ooc_check(text, role=None):
     return _ooc_check(role or XIAOZAYU, text)
+
+
+def ooc_scan(text, role=None):
+    return _ooc_scan(role or XIAOZAYU, text)
 
 
 def fallback_line(used, role=None, intent=None):

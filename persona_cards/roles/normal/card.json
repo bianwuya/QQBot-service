@@ -15,16 +15,26 @@
     "trigger_mode": "normal",
     "trigger_rounds": 0,
     "modes": {
-      "normal": {"label": "当前是普通对话状态：自然、直接地回应用户"}
+      "normal": {
+        "label": "当前是普通对话状态：自然、直接地回应用户"
+      }
     }
   },
-  "triggers": {"flirt": [], "insult": []},
+  "triggers": {
+    "flirt": [],
+    "insult": []
+  },
   "relation_rules": {
     "minimum": 0,
     "maximum": 0,
     "flirt_delta": 0,
     "insult_delta": 0,
-    "levels": [{"through": 0, "label": "一般"}]
+    "levels": [
+      {
+        "through": 0,
+        "label": "一般"
+      }
+    ]
   },
   "reply_limits": {
     "max_chars": 500,
@@ -58,5 +68,32 @@
     "chat": "直接回应话题，保持简洁有用。"
   },
   "memory_behavior": "关系摘要只用于保持语气连续，不推断未记录的个人信息。",
-  "ooc_words": ["作为AI", "作为人工智能", "我是语言模型"]
+  "ooc": {
+    "hard": [
+      "作为AI",
+      "作为人工智能",
+      "作为助手",
+      "我是语言模型",
+      "根据相关规定",
+      "系统提示词",
+      "我是真人",
+      "我不是机器人"
+    ],
+    "service_tone": [
+      "很高兴为您服务",
+      "请问还有什么(可以|能)帮",
+      "建议您咨[询询]",
+      "感谢您的理解"
+    ],
+    "soft": [
+      "我不能",
+      "抱歉，",
+      "抱歉,",
+      "建议您"
+    ],
+    "soft_allow": [
+      "我不能(确定|保证|回答这个)",
+      "抱歉(，|,)?.{0,6}(帮你看|我确认)"
+    ]
+  }
 }

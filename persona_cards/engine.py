@@ -1,4 +1,5 @@
 """Role-independent prompt, trigger, relation and corpus behavior."""
+import re
 import time
 
 
@@ -46,8 +47,63 @@ def behavior_block(role, intent=None):
     return current + ('\n其他情境索引：' + '；'.join(index) if index else '')
 
 
+_OOC_KEYS = ('hard', 'service_tone', 'soft', 'soft_allow')
+
+
+def _ooc_config(role):
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    config = data.get('ooc')
+    if not isinstance(config, dict):
+        config = {}
+    merged = {}
+    for key in _OOC_KEYS:
+        values = config.get(key)
+        merged[key] = [str(value) for value in values] if isinstance(values, list) else []
+    legacy = data.get('ooc_words')
+    if isinstance(legacy, list):
+        for word in legacy:
+            word = str(word)
+            if word and word not in merged['hard']:
+                merged['hard'].append(word)
+    return merged
+
+
+def _regex_hit(patterns, text):
+    for pattern in patterns:
+        if not pattern:
+            continue
+        try:
+            if re.search(pattern, text):
+                return pattern
+        except re.error:
+            if pattern in text:
+                return pattern
+    return None
+
+
+def ooc_scan(role, text):
+    text = text or ''
+    config = _ooc_config(role)
+    for word in config['hard']:
+        if word and word in text:
+            return {'retry': True, 'soft': False, 'kind': 'hard', 'matched': word}
+    service = _regex_hit(config['service_tone'], text)
+    if service:
+        return {'retry': True, 'soft': False, 'kind': 'service_tone', 'matched': service}
+    soft = next((word for word in config['soft'] if word and word in text), None)
+    if soft and not _regex_hit(config['soft_allow'], text):
+        return {'retry': False, 'soft': True, 'kind': 'soft', 'matched': soft}
+    return {'retry': False, 'soft': False, 'kind': None, 'matched': None}
+
+
 def ooc_check(role, text):
-    return any(word in (text or '') for word in role.data.get('ooc_words', []))
+    return bool(ooc_scan(role, text)['retry'])
+
+
+def ooc_prompt_words(role):
+    config = _ooc_config(role)
+    words = config['hard'] + config['service_tone']
+    return '／'.join(words) or '不得跳出角色自述模型身份'
 
 
 def fallback_line(role, used, intent=None):
@@ -133,7 +189,7 @@ def build_prompt(role, state, relation, context):
         'state_label': state_label,
         'corpus_block': corpus_block or '· 保持自然、简洁并贴合角色定义。',
         'boundaries_block': '\n'.join('- '+line for line in role.data['boundaries']),
-        'ooc_words': '／'.join(role.data.get('ooc_words', [])) or '不得跳出角色自述模型身份',
+        'ooc_words': ooc_prompt_words(role),
         'memory': memory,
         'social_behavior': role.data['social_behavior'],
         'behavior_block': behavior_block(role, context.get('intent')),

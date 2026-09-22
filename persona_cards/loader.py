@@ -139,6 +139,16 @@ def _validate(card, corpus, directory):
     behaviors = card.get('behaviors')
     if behaviors is not None and (not isinstance(behaviors, dict) or not all(isinstance(key, str) and isinstance(value, str) and value.strip() for key, value in behaviors.items())):
         raise RoleCardError(f'{directory.name}: behaviors must map intent names to non-empty rules')
+    ooc_words = card.get('ooc_words')
+    if ooc_words is not None and not _string_list(ooc_words, allow_empty=True):
+        raise RoleCardError(f'{directory.name}: ooc_words must be a string list when present')
+    ooc = card.get('ooc')
+    if ooc is not None:
+        if not isinstance(ooc, dict):
+            raise RoleCardError(f'{directory.name}: ooc must be an object when present')
+        for name in ('hard', 'service_tone', 'soft', 'soft_allow'):
+            if name in ooc and not _string_list(ooc[name], allow_empty=True):
+                raise RoleCardError('{}: ooc.{} must be a string list when present'.format(directory.name, name))
     if not isinstance(corpus, dict) or not isinstance(corpus.get('categories'), dict):
         raise RoleCardError(f'{directory.name}: corpus categories are required')
     if not all(_string_list(items) for items in corpus['categories'].values()):
