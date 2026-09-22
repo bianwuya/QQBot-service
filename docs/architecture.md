@@ -61,7 +61,7 @@ Bot 工作线程 store.take()
        ├─ 自定义命令匹配（固定文本原样返回；gen 模型文本走 Reply Pipeline）
        ├─ 文件/视频能力开关过滤
        ├─ keyword_reply()                 ← 解析群角色/全局默认 → 角色 Prompt → Reply Pipeline
-       └─ 普通聊天（reply_style + 至多4条相关长期记忆）→ llm.chat → Reply Pipeline → history
+       └─ 普通聊天：群聊解析角色卡（私聊用通用 SYSTEM）+ reply_style + 至多4条相关长期记忆 → Reply Pipeline → history
 出站：每条回复元素 → OneBot 发送 → 回执写 delivery 表
   ├─ 文本 >1400 字 → forward_batches 合并转发（1200字/节点，30节点/批）
   ├─ 文件 → AES-256 ZIP，密码入文件名
@@ -110,7 +110,7 @@ Bot 工作线程 store.take()
 - 优先级：内置命令 > 自定义命令 > 关键词 > 普通聊天
 
 **回复风格**（管理员，`/风格 <描述>` 覆盖式，≤200 字）：
-存 settings 键 `reply_style`（按 scope），普通聊天时拼进 SYSTEM 尾部作为"素材"，`/风格 默认` 清除。
+存 settings 键 `reply_style`（按 scope）；群普通聊天作为不能覆盖角色/安全边界的补充写入角色 Prompt，私聊写入通用 SYSTEM，`/风格 默认` 清除。
 
 **群关键词**（管理员）：群里 `/关键词 添加|删除` 作用于本群 `keywords_extra`（≤30，与全局 16 词合并）；私聊维护全局 `keywords`（`*` scope）。
 
@@ -142,11 +142,13 @@ Bot 工作线程 store.take()
 
 实现位于 `persona_cards/`；`persona.py` 仅保留旧 API 兼容。每张角色由 `card.json`（结构字段）、`prompt.md`（大段模板）与 `corpus.json`（语料/fallback/状态抽样计划）组成。加载器逐卡校验必填字段，损坏卡仅记录到 catalog errors；没有有效卡时仍提供最小普通助手，避免服务整体崩溃。
 
-正式角色：`xiaozayu`（小杂鱼，默认）与 `normal`（普通助手）。选择层级为群 `persona_role` 覆盖 > `*` 全局默认 > 内置默认；私聊使用全局默认。不同 role 的非默认运行状态使用独立 settings 键，scope 之间仍完全隔离。
+正式角色：`xiaozayu`（小杂鱼，默认）与 `normal`（普通助手）。选择层级为群 `persona_role` 覆盖 > `*` 全局默认 > 内置默认；私聊关键词特殊触发使用全局默认，私聊普通聊天仍用通用助手。不同 role 的非默认运行状态使用独立 settings 键，scope 之间仍完全隔离。
+
+群聊中的全部普通文字聊天都会经过当前解析到的角色卡，包括角色 Prompt、状态机、关系、语料 LRU、OOC 单次重试、fallback 和角色回复上限；无需命中关键词。命令、自定义命令、文件/视频处理继续使用各自独立管线，私聊普通聊天保持通用助手管线。
 
 小杂鱼规格文档：`docs/persona-xiaozayu.md`。角色行为保持理论王者实战青铜、嘴硬挑衅、被反撩即破防。
 
-**触发**：消息包含关键词（16 全局词 + 群词表）→ `app.keyword_reply`，2 秒冷却/作用域，回复不写 history。
+**关键词特殊触发**：消息包含关键词（16 全局词 + 群词表）→ `app.keyword_reply`，可在群里免 @，有 2 秒冷却且回复不写 history；未命中关键词但通过普通群聊准入的文字仍走当前角色卡，并正常写 history。
 
 **七层与实现对应**：
 1. 内核 `CORE`：怕被看穿 → 先虚张声势
@@ -239,7 +241,7 @@ ffmpeg_dir, keyword_cooldown_seconds
 重启：powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-service.ps1
      （杀全部匹配进程 → Start-Process 带日志重定向 → 等8秒 → 列进程 → /healthz）
 健康：tools/check-service.ps1（进程+端口3000/3001/3002归属+健康）
-测试：.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests   （138 项）
+测试：.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests   （140 项）
 ```
 
 **本地镜像同步**（Linux 侧 `/home/user` 执行，勿先 cd）：
@@ -269,11 +271,11 @@ python qqbot_new/sync_remote.py <file...>   # read+expected_versions 原子上�
 
 ---
 
-## 14. 测试体系（138 项）
+## 14. 测试体系（140 项）
 
 `tests/test_bot.py`：`Fixture` 基类把 `llm/ob` 换成 Mock、临时目录跑真 SQLite。覆盖：权限矩阵（群主不提权/撤销/跨会话）、命令系统、自定义命令与风格、关键词与能力开关（含 `/关 聊天` 静默）、人格系统（状态机/亲密度/出戏守卫/语料LRU）、safe_net、加密包、限流、投递回执。
 `tests/test_reply_pipeline.py`：覆盖 Markdown 清洗、代码/URL/路径/JSON 保护、空行与重复处理、AI 腔识别、三条模型输出路径、persona 单次重试、固定文本兼容和长回复发送层边界。
-`tests/test_persona_roles.py`：覆盖角色卡校验、损坏隔离、默认回落、旧 API、角色列表/切换权限、群/全局层级、旧 settings 与状态隔离。
+`tests/test_persona_roles.py`：覆盖角色卡校验、损坏隔离、默认回落、旧 API、角色列表/切换权限、群普通聊天全覆盖、私聊通用管线、群/全局层级、旧 settings 与状态隔离。
 `tests/test_long_memory.py`：覆盖 10 轮/3 天门槛、投递成功口径、命令/关键词/文件排除、发送失败、候选校验、敏感信息拦截、去重更新、Prompt 数量、旧库迁移、权限和 scope+owner 隔离。
 **改完必跑**：本地 + 远端各一遍再重启。
 
@@ -288,7 +290,7 @@ python qqbot_new/sync_remote.py <file...>   # read+expected_versions 原子上�
 - `relations` 亲密度只影响语气提示，无外号字段；无冷场主动发言（被动机器人）
 
 **优化入口（按改造成本从低到高）**：
-1. 在 `persona_cards/roles/<id>/` 增加角色卡最安全（138 项测试护航）；不要把角色专属大段文本重新写回业务层
+1. 在 `persona_cards/roles/<id>/` 增加角色卡最安全（140 项测试护航）；不要把角色专属大段文本重新写回业务层
 2. 外号库：`relations` 加 `nick`，`/外号` 命令 + prompt 记忆行
 3. 冷场找事：需要新增"主动发送"调度器（当前无主动出站机制）
 4. 队列并行化：`take()` 加工作线程数，注意模型网关限流与 SQLite 写锁

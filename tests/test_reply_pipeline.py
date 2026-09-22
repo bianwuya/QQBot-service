@@ -87,7 +87,9 @@ class OutputPipelineIntegration(Fixture):
     def test_long_reply_remains_for_forward_send_layer(self):
         answer = '这是一段需要由发送层处理的长回答内容'*100
         self.bot.llm.chat.return_value = answer
-        output = self.bot.process(self.e(), 'pipeline-long')
+        # Group replies obey their role-card limit; private generic chat still
+        # exercises the unchanged long-reply forwarding layer.
+        output = self.bot.process(self.e(group=None), 'pipeline-long')
         self.assertEqual(output[0]['text'], answer)
         expanded = self.bot.expand(output, '99999')
         self.assertTrue(expanded)
