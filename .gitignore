@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+config.json
+state/
+work/
+logs/
+*.log
+tools/*.exe
+tools/*.zip
+tools/*.llbot-original
+cookies/

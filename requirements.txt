@@ -1,0 +1,6 @@
+# Windows venv uses existing system packages; versions observed and tested on this host.
+requests==2.34.2
+yt-dlp==2026.8.19
+pypdf==6.18.1
+pyzipper==0.3.6
+websocket-client==1.9.0
