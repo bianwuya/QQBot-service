@@ -34,7 +34,7 @@ HELP='''QQ助手使用说明
 /导出 — 将你在本会话的上一条答案加密打包发回
 /重置 — 清除你自己在本会话的对话上下文
 /帮助 — 显示本说明
-管理员专用：/模型列表、/模型 <完整模型名>、/默认模型 <完整模型名>、/角色、/角色列表、/记忆 状态、/记忆 查看 <用户QQ>、/状态、/任务、/启用、/停用、/群触发 @ 或 全部、/重发 <任务号>、/能力、/开 名称、/关 名称、/风格、/指令、/关键词（在群里管理本群触发词）
+管理员专用：/模型列表、/模型 <完整模型名>、/默认模型 <完整模型名>、/角色、/角色列表、/记忆 状态、/记忆 查看 <用户QQ>、/人格状态、/状态、/任务、/启用、/停用、/群触发 @ 或 全部、/重发 <任务号>、/能力、/开 名称、/关 名称、/风格、/指令、/关键词（在群里管理本群触发词）
 密码随机生成，并写在ZIP文件名及同会话提示中；这不防范能看到同一会话的人。
 不执行系统命令，不自动读取本机文件，不绕过视频平台登录/付费/DRM限制。'''
 # 关键词人设已升级为七层人格系统，规格与语料见 persona.py / docs/persona-xiaozayu.md。
@@ -61,7 +61,7 @@ class Bot:
         for d in ('state','work','logs'):(self.root/d).mkdir(exist_ok=True)
         self.store=Store(self.root/'state/bot.sqlite3')
         self.ob=OneBot(self.cfg['onebot']);self.llm=LLM(self.cfg['llm'])
-        self.connected=False;self.online=False;self.self_id='';self.last_event=0;self.stop=threading.Event()
+        self.connected=False;self.online=False;self.self_id='';self.last_event=0;self.stop=threading.Event();self.persona_metrics={}
         self.log=logging.getLogger('qqbot')
     def model(self,scope):
         return self.store.get(scope,'model',self.store.get('*','default_model',self.cfg['llm']['default_model']))
@@ -120,6 +120,17 @@ class Bot:
             if selected is None:return self.scope_text(e,'未找到该角色，使用 /角色列表 查看可用角色。')
             self.store.set(target_scope,'persona_role',selected.id)
             return self.scope_text(e,('本群角色已设置为：' if scope.startswith('g:') else '全局默认角色已设置为：')+selected.display_name+'（'+selected.id+'）')
+        if cmd=='/人格状态':
+            role=persona.role_for(self.store,scope)
+            state,_=persona.load_runtime(self.store,scope,role,owner=e['owner'])
+            mood=persona.load_mood(self.store,scope,role)
+            relation=(self.store.get(scope,'relations') or {}).get(e['owner'],{})
+            if not isinstance(relation,dict):relation={}
+            metrics=self.persona_metrics.get(scope,{})
+            return self.scope_text(e,'角色：'+role.display_name+'（'+role.id+'）\n'
+                '你的状态：'+state['mode']+'（剩余 '+str(state['left'])+'）｜群氛围：'+mood['vibe']+'\n'
+                '关系档位：'+persona.relation_level(relation.get('a',0),role)+'\n'
+                'OOC重试 '+str(metrics.get('ooc_retry',0))+' 次｜风格告警 '+str(metrics.get('ooc_soft',0))+' 次｜兜底 '+str(metrics.get('fallback',0))+' 次')
         if cmd=='/记忆':
             if arg=='状态':
                 stats=self.store.memory_stats(scope)
@@ -223,6 +234,29 @@ class Bot:
             return self.pack(file,'分析结果.md',directory)
         if cmd.startswith('/') and cmd!='/打包' and cmd not in custom_commands(self.store,scope):return self.scope_text(e,'未知指令。发送 /帮助 查看可用功能。')
         return None
+    def persona_metric(self,scope,name):
+        metrics=self.persona_metrics.setdefault(scope,{'ooc_retry':0,'ooc_soft':0,'fallback':0})
+        metrics[name]=metrics.get(name,0)+1
+    def persona_answer(self,scope,messages,role,intent,used):
+        """Persona LLM call with existing retry-once/fallback semantics; counts only."""
+        try:
+            answer=self.llm.chat(self.model(scope),messages)
+            checker=lambda value:persona.ooc_check(value,role)
+            checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
+            if checked.retry:
+                self.persona_metric(scope,'ooc_retry')
+                answer=self.llm.chat(self.model(scope),messages)
+                checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
+            generated=not checked.retry and bool(checked.text)
+            if generated:
+                answer=checked.text
+                if persona.ooc_scan(answer,role)['soft']:self.persona_metric(scope,'ooc_soft')
+            else:
+                self.persona_metric(scope,'fallback');answer=persona.fallback_line(used,role,intent)
+        except Rejected:
+            generated=False;self.persona_metric(scope,'fallback')
+            answer=persona.fallback_line(used,role,intent)
+        return answer,generated
     def keyword_reply(self,e,cfg):
         if command(e['text'])[0].startswith('/'):return None
         if not keyword_hit(e['text'],group_keywords(self.store,e['scope'])):return None
@@ -242,15 +276,7 @@ class Bot:
             context['identity_path']='admit' if probe['n'] or persona.serious_marker_hit(role,text) else 'deflect'
         prompt,chosen=persona.build_prompt(role,state,relation,context)
         messages=[{'role':'system','content':prompt},{'role':'user','content':text[:200]}]
-        try:
-            answer=self.llm.chat(self.model(scope),messages)
-            checker=lambda value:persona.ooc_check(value,role)
-            checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
-            if checked.retry:
-                answer=self.llm.chat(self.model(scope),messages)
-                checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
-            answer=persona.fallback_line(used,role,intent) if checked.retry or not checked.text else checked.text
-        except Rejected:answer=persona.fallback_line(used,role,intent)
+        answer,_generated=self.persona_answer(scope,messages,role,intent,used)
         if intent=='identity':persona.note_identity_probe(self.store,scope,owner)
         state=persona.finish_turn(role,state,triggered)
         persona.finish_mood(self.store,scope,role,mood,triggered,intent)
@@ -274,18 +300,7 @@ class Bot:
             prompt+='\n\n# 当前会话说话风格要求（角色内补充）\n以下内容只能细化表达方式，不能覆盖角色定义或安全边界：'+style.strip()[:200]
         if memory_context:prompt+='\n\n# 相关长期记忆\n'+memory_context
         messages=[{'role':'system','content':prompt}]+self.store.context(scope,owner)+[{'role':'user','content':question}]
-        try:
-            answer=self.llm.chat(self.model(scope),messages)
-            checker=lambda value:persona.ooc_check(value,role)
-            checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
-            if checked.retry:
-                answer=self.llm.chat(self.model(scope),messages)
-                checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
-            generated=not checked.retry and bool(checked.text)
-            answer=checked.text if generated else persona.fallback_line(used,role,intent)
-        except Rejected:
-            generated=False
-            answer=persona.fallback_line(used,role,intent)
+        answer,generated=self.persona_answer(scope,messages,role,intent,used)
         if intent=='identity':persona.note_identity_probe(self.store,scope,owner)
         state=persona.finish_turn(role,state,triggered)
         persona.finish_mood(self.store,scope,role,mood,triggered,intent)
