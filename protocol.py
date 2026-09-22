@@ -9,7 +9,7 @@ from safe_net import Rejected
 
 class DeliveryUnknown(RuntimeError):pass
 
-ADMIN_COMMANDS={'/模型','/模型列表','/默认模型','/启用','/停用','/群触发','/状态','/重发','/管理员','/配置','/任务','/执行','/run','/agent','/能力','/开','/关','/关键词','/风格','/指令'}
+ADMIN_COMMANDS={'/模型','/模型列表','/默认模型','/角色','/角色列表','/启用','/停用','/群触发','/状态','/重发','/管理员','/配置','/任务','/执行','/run','/agent','/能力','/开','/关','/关键词','/风格','/指令'}
 
 CAPABILITIES={'聊天':'chat','文件':'files','视频':'videos','关键词':'keywords'}
 BUILTIN_COMMANDS=ADMIN_COMMANDS|{'/帮助','/help','/重置','/下载','/打包','/导出','/风格','/指令','/关键词','/能力','/开','/关'}

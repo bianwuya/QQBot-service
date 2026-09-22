@@ -33,7 +33,7 @@ HELP='''QQ助手使用说明
 /导出 — 将你在本会话的上一条答案加密打包发回
 /重置 — 清除你自己在本会话的对话上下文
 /帮助 — 显示本说明
-管理员专用：/模型列表、/模型 <完整模型名>、/默认模型 <完整模型名>、/状态、/任务、/启用、/停用、/群触发 @ 或 全部、/重发 <任务号>、/能力、/开 名称、/关 名称、/风格、/指令、/关键词（在群里管理本群触发词）
+管理员专用：/模型列表、/模型 <完整模型名>、/默认模型 <完整模型名>、/角色、/角色列表、/状态、/任务、/启用、/停用、/群触发 @ 或 全部、/重发 <任务号>、/能力、/开 名称、/关 名称、/风格、/指令、/关键词（在群里管理本群触发词）
 密码随机生成，并写在ZIP文件名及同会话提示中；这不防范能看到同一会话的人。
 不执行系统命令，不自动读取本机文件，不绕过视频平台登录/付费/DRM限制。'''
 # 关键词人设已升级为七层人格系统，规格与语料见 persona.py / docs/persona-xiaozayu.md。
@@ -97,6 +97,24 @@ class Bot:
             self.store.set('*' if cmd=='/默认模型' else scope,'default_model' if cmd=='/默认模型' else 'model',arg)
             return self.scope_text(e,'已设置'+('默认' if cmd=='/默认模型' else '当前会话')+'模型：'+arg)
         if cmd=='/模型列表':return self.scope_text(e,'网关可用模型（列表可见不等于每个模型已完成调用测试）：\n'+'\n'.join(self.llm.models()))
+        if cmd=='/角色列表':
+            current=persona.role_for(self.store,scope)
+            lines=[role.id+' — '+role.display_name+('（当前）' if role.id==current.id else '') for role in persona.roles()]
+            return self.scope_text(e,'可用角色：\n'+'\n'.join(lines))
+        if cmd=='/角色':
+            current=persona.role_for(self.store,scope)
+            if not arg:
+                source='本群覆盖' if scope.startswith('g:') and self.store.get(scope,'persona_role') else '全局默认'
+                return self.scope_text(e,'当前角色：'+current.display_name+'（'+current.id+'，'+source+'）\n使用 /角色列表 查看，/角色 <角色名> 切换。')
+            target_scope=persona.role_selection_scope(scope)
+            if arg=='默认':
+                self.store.set(target_scope,'persona_role',None if scope.startswith('g:') else persona.DEFAULT_ROLE_ID)
+                selected=persona.role_for(self.store,scope)
+                return self.scope_text(e,('本群已恢复全局默认角色：' if scope.startswith('g:') else '全局角色已恢复默认：')+selected.display_name)
+            selected=persona.find_role(arg)
+            if selected is None:return self.scope_text(e,'未找到该角色，使用 /角色列表 查看可用角色。')
+            self.store.set(target_scope,'persona_role',selected.id)
+            return self.scope_text(e,('本群角色已设置为：' if scope.startswith('g:') else '全局默认角色已设置为：')+selected.display_name+'（'+selected.id+'）')
         if cmd=='/状态':return self.scope_text(e,'连接：'+str(self.connected)+'；QQ在线：'+str(self.online)+'\n当前模型：'+self.model(scope)+'\n任务统计：'+json.dumps(self.store.counts(),ensure_ascii=False)+'\n不提供本机命令执行。')
         if cmd in ('/启用','/停用'):
             self.store.set(scope,'enabled',cmd=='/启用');return self.scope_text(e,'当前会话已'+('启用' if cmd=='/启用' else '停用')+'普通用户功能。')
@@ -192,26 +210,23 @@ class Bot:
         if not cap(self.store,e['scope'],'keywords'):return None
         scope,owner,text=e['scope'],e['owner'],e['text']
         self.store.set(scope,'kw_cooldown_until',time.time()+float(cfg.get('keyword_cooldown_seconds',2)))
-        relation=persona.touch(self.store,scope,owner,text)
-        state=self.store.get(scope,'persona_state') or {'mode':'normal','left':0}
-        triggered=bool(persona.flirt_hit(text))
-        if triggered:state={'mode':'frail','left':persona.FR_ROUNDS}
-        used=self.store.get(scope,'persona_used') or []
-        prompt,chosen=persona.build_prompt(state['mode'],relation,used)
+        role=persona.role_for(self.store,scope)
+        relation=persona.touch(self.store,scope,owner,text,role)
+        state,used=persona.load_runtime(self.store,scope,role)
+        state,triggered=persona.begin_turn(role,state,text)
+        prompt,chosen=persona.build_prompt(role,state,relation,{'used':used,'scope':scope,'owner':owner})
         messages=[{'role':'system','content':prompt},{'role':'user','content':text[:200]}]
         try:
             answer=self.llm.chat(self.model(scope),messages)
-            checked=process_reply(answer,PERSONA_CHAT,max_chars=60,ooc_check=persona.ooc_check)
+            checker=lambda value:persona.ooc_check(value,role)
+            checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role),ooc_check=checker)
             if checked.retry:
                 answer=self.llm.chat(self.model(scope),messages)
-                checked=process_reply(answer,PERSONA_CHAT,max_chars=60,ooc_check=persona.ooc_check)
-            answer=persona.fallback_line(used) if checked.retry or not checked.text else checked.text
-        except Rejected:answer=persona.fallback_line(used)
-        if state['mode']=='frail' and not triggered:
-            left=state['left']-1
-            state={'mode':'frail' if left>0 else 'normal','left':max(0,left)}
-        self.store.set(scope,'persona_state',state)
-        self.store.set(scope,'persona_used',(used+chosen)[-20:])
+                checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role),ooc_check=checker)
+            answer=persona.fallback_line(used,role) if checked.retry or not checked.text else checked.text
+        except Rejected:answer=persona.fallback_line(used,role)
+        state=persona.finish_turn(role,state,triggered)
+        persona.save_runtime(self.store,scope,role,state,used+chosen)
         return self.scope_text(e,answer)
     def process(self,e,ident):
         cfg=self.config_loader();directory=self.root/'work'/ident;directory.mkdir(exist_ok=True)

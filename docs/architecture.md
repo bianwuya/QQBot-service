@@ -31,7 +31,8 @@ app.py（QQBot 主服务）            ← :3002 健康端点 /healthz
 | `app.py` | 主服务：事件入队、任务处理、命令分发、出站投递、健康端点 | `Bot`、`load_config`、`SYSTEM`、`HELP` |
 | `protocol.py` | OneBot/LLM 客户端、事件归一化、命令解析、能力与关键词判定 | `OneBot`、`LLM`、`normalize`、`should_handle`、`command`、`cap`、`custom_commands`、`group_keywords`、`forward_batches`、`BUILTIN_COMMANDS`、`ADMIN_COMMANDS` |
 | `store.py` | SQLite 持久层（6 张表 + 崩溃恢复） | `Store`、`Busy` |
-| `persona.py` | 七层人格系统（规格+语料+状态机+守卫） | `build_prompt`、`touch`、`flirt_hit`、`ooc_check`、`CORPUS`、`FALLBACKS` |
+| `persona.py` | 角色卡体系的薄兼容门面，保留旧 import/API | `roles`、`role_for`、`build_prompt`、`CORPUS`、`FALLBACKS` |
+| `persona_cards/` | 角色卡校验加载、通用 Prompt 引擎、状态隔离与角色数据 | `RoleCard`、`load_catalog`、`build_prompt`、`resolve_role` |
 | `reply_pipeline.py` | 模型回复的上下文分类、保护式格式清洗、重复/AI 腔检测、长度约束与重试判定 | `process_reply`、`clean_reply`、`validate_reply`、`ReplyResult` |
 | `media.py` | 视频解析：平台识别、yt-dlp 主路径、抖音分享页后备通路 | `get_video`、`platform_of`、`share_urls`、`run_bounded` |
 | `documents.py` | 文档抽取（文本/PDF/Word/Excel/PPT）+ AES-256 加密 ZIP | `extract`、`encrypted_archive` |
@@ -59,7 +60,7 @@ Bot 工作线程 store.take()
        ├─ do_command()                    ← /开头命令分发（见 §5）
        ├─ 自定义命令匹配（固定文本原样返回；gen 模型文本走 Reply Pipeline）
        ├─ 文件/视频能力开关过滤
-       ├─ keyword_reply()                 ← 关键词人格回复走 Reply Pipeline，OOC 最多重试 1 次
+       ├─ keyword_reply()                 ← 解析群角色/全局默认 → 角色 Prompt → Reply Pipeline
        └─ 普通聊天（带 reply_style 注入）→ llm.chat → Reply Pipeline → history
 出站：每条回复元素 → OneBot 发送 → 回执写 delivery 表
   ├─ 文本 >1400 字 → forward_batches 合并转发（1200字/节点，30节点/批）
@@ -93,10 +94,12 @@ Bot 工作线程 store.take()
 ## 5. 命令系统
 
 **内置命令**（`BUILTIN_COMMANDS`）：
-`/帮助 /重置 /下载 /打包 /导出 /模型 /模型列表 /默认模型 /状态 /重发 /启用 /停用 /群触发 /能力 /开 /关 /关键词 /风格 /指令`
+`/帮助 /重置 /下载 /打包 /导出 /模型 /模型列表 /默认模型 /角色 /角色列表 /状态 /重发 /启用 /停用 /群触发 /能力 /开 /关 /关键词 /风格 /指令`
 
 **管理员命令**（`ADMIN_COMMANDS`，仅配置文件中 admins，群主/群管理员不提权）：
-模型管理、`/启用 /停用 /群触发 /状态 /重发 /管理员 /配置 /任务 /执行 /能力 /开 /关 /关键词 /风格 /指令`
+模型与角色管理、`/启用 /停用 /群触发 /状态 /重发 /管理员 /配置 /任务 /执行 /能力 /开 /关 /关键词 /风格 /指令`
+
+**角色命令**：`/角色` 查看当前角色，`/角色列表` 列出有效卡；群聊 `/角色 <id|名称>` 写本群 `persona_role`，私聊管理员执行时写全局 `*`；群聊 `/角色 默认` 删除覆盖并回落全局默认。损坏卡会被加载器隔离，不影响其他有效角色和 Bot 启动。
 
 **自定义命令**（管理员创建，settings 键 `custom_commands`，按 scope）：
 - 结构：`{"/命令名": {"mode": "text"|"gen", "content": ...}}`，每会话 ≤20 条
@@ -126,13 +129,17 @@ Bot 工作线程 store.take()
 `cap:*`（能力开关）、`enabled`（总开关）、`model`（会话模型）、`default_model`（`*`）、
 `keywords`（`*` 全局词表）、`keywords_extra`（群词表）、`kw_cooldown_until`、
 `reply_style`、`custom_commands`、
-`persona_state`、`persona_used`、`relations`（人格系统，见 §7）
+`persona_role`（群覆盖或 `*` 全局默认）、`persona_state`、`persona_used`、`persona_state:<role>`、`persona_used:<role>`、`relations`（角色系统，见 §7）
 
 ---
 
-## 7. 七层人格系统（`persona.py`）
+## 7. 多角色卡与七层人格系统
 
-规格文档：`docs/persona-xiaozayu.md`。角色"小杂鱼"：理论王者实战青铜，嘴硬挑衅、被反撩即破防。
+实现位于 `persona_cards/`；`persona.py` 仅保留旧 API 兼容。每张角色由 `card.json`（结构字段）、`prompt.md`（大段模板）与 `corpus.json`（语料/fallback/状态抽样计划）组成。加载器逐卡校验必填字段，损坏卡仅记录到 catalog errors；没有有效卡时仍提供最小普通助手，避免服务整体崩溃。
+
+正式角色：`xiaozayu`（小杂鱼，默认）与 `normal`（普通助手）。选择层级为群 `persona_role` 覆盖 > `*` 全局默认 > 内置默认；私聊使用全局默认。不同 role 的非默认运行状态使用独立 settings 键，scope 之间仍完全隔离。
+
+小杂鱼规格文档：`docs/persona-xiaozayu.md`。角色行为保持理论王者实战青铜、嘴硬挑衅、被反撩即破防。
 
 **触发**：消息包含关键词（16 全局词 + 群词表）→ `app.keyword_reply`，2 秒冷却/作用域，回复不写 history。
 
@@ -217,7 +224,7 @@ ffmpeg_dir, keyword_cooldown_seconds
 重启：powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-service.ps1
      （杀全部匹配进程 → Start-Process 带日志重定向 → 等8秒 → 列进程 → /healthz）
 健康：tools/check-service.ps1（进程+端口3000/3001/3002归属+健康）
-测试：.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests   （106 项）
+测试：.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests   （122 项）
 ```
 
 **本地镜像同步**（Linux 侧 `/home/user` 执行，勿先 cd）：
@@ -246,10 +253,11 @@ python qqbot_new/sync_remote.py <file...>   # read+expected_versions 原子上�
 
 ---
 
-## 14. 测试体系（106 项）
+## 14. 测试体系（122 项）
 
 `tests/test_bot.py`：`Fixture` 基类把 `llm/ob` 换成 Mock、临时目录跑真 SQLite。覆盖：权限矩阵（群主不提权/撤销/跨会话）、命令系统、自定义命令与风格、关键词与能力开关（含 `/关 聊天` 静默）、人格系统（状态机/亲密度/出戏守卫/语料LRU）、safe_net、加密包、限流、投递回执。
 `tests/test_reply_pipeline.py`：覆盖 Markdown 清洗、代码/URL/路径/JSON 保护、空行与重复处理、AI 腔识别、三条模型输出路径、persona 单次重试、固定文本兼容和长回复发送层边界。
+`tests/test_persona_roles.py`：覆盖角色卡校验、损坏隔离、默认回落、旧 API、角色列表/切换权限、群/全局层级、旧 settings 与状态隔离。
 **改完必跑**：本地 + 远端各一遍再重启。
 
 ---
@@ -263,7 +271,7 @@ python qqbot_new/sync_remote.py <file...>   # read+expected_versions 原子上�
 - `relations` 亲密度只影响语气提示，无外号字段；无冷场主动发言（被动机器人）
 
 **优化入口（按改造成本从低到高）**：
-1. `persona.py` 纯数据+纯函数，加语料/加状态最安全（106 项测试护航）
+1. 在 `persona_cards/roles/<id>/` 增加角色卡最安全（122 项测试护航）；不要把角色专属大段文本重新写回业务层
 2. 外号库：`relations` 加 `nick`，`/外号` 命令 + prompt 记忆行
 3. 冷场找事：需要新增"主动发送"调度器（当前无主动出站机制）
 4. 队列并行化：`take()` 加工作线程数，注意模型网关限流与 SQLite 写锁
