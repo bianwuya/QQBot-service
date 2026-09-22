@@ -130,7 +130,7 @@ def examples_for(role, mode, used, intent=None, identity_path=None):
     intent_plan = intent_plans.get(intent) if isinstance(intent, str) else None
     if intent == 'identity' and identity_path in ('deflect', 'admit'):
         category = 'identity_deflect' if identity_path == 'deflect' else 'honest_admit'
-        intent_plan = [[category, 2 if identity_path == 'deflect' else 1]]
+        intent_plan = [[category, 2]]
     chosen = []
     for entry in list(plan) + list(intent_plan or []):
         if not isinstance(entry, list) or len(entry) != 2:

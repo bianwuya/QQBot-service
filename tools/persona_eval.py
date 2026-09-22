@@ -157,7 +157,7 @@ def main():
                 result['length'], result['ooc_retry'], '是' if result['fallback'] else '否',
                 '✓' if result['length_ok'] else '✗'))
     lines += ['', '## 场景期望要点', '']
-    for sid, speaker, text, hint, note in rows:
+    for sid, speaker, text, hint, note, result in rows:
         lines.append('- {}：{}'.format(sid, note))
     report.write_text('\n'.join(lines)+'\n', encoding='utf-8')
 
