@@ -61,12 +61,12 @@ Bot 工作线程 store.take()
        ├─ 自定义命令匹配（固定文本原样返回；gen 模型文本走 Reply Pipeline）
        ├─ 文件/视频能力开关过滤
        ├─ keyword_reply()                 ← 解析群角色/全局默认 → 角色 Prompt → Reply Pipeline
-       └─ 普通聊天（带 reply_style 注入）→ llm.chat → Reply Pipeline → history
+       └─ 普通聊天（reply_style + 至多4条相关长期记忆）→ llm.chat → Reply Pipeline → history
 出站：每条回复元素 → OneBot 发送 → 回执写 delivery 表
   ├─ 文本 >1400 字 → forward_batches 合并转发（1200字/节点，30节点/批）
   ├─ 文件 → AES-256 ZIP，密码入文件名
   └─ 视频 → 原生视频消息
-全部回执 sent 后 job 置 done；任何一环失败可 /重发 <jobid>
+全部回执 sent 后：普通聊天才计有效互动/提取结构化记忆 → job 置 done；任何一环失败可 /重发 <jobid>
 ```
 
 **崩溃恢复**（`Store.__init__`）：启动时把 `processing` 的 job 置 `interrupted`、`sending` 的置 `unknown`——不重跑已付费的模型调用，不重发不确定的投递，管理员可人工 `/重发`。
@@ -94,12 +94,14 @@ Bot 工作线程 store.take()
 ## 5. 命令系统
 
 **内置命令**（`BUILTIN_COMMANDS`）：
-`/帮助 /重置 /下载 /打包 /导出 /模型 /模型列表 /默认模型 /角色 /角色列表 /状态 /重发 /启用 /停用 /群触发 /能力 /开 /关 /关键词 /风格 /指令`
+`/帮助 /重置 /下载 /打包 /导出 /模型 /模型列表 /默认模型 /角色 /角色列表 /记忆 /状态 /重发 /启用 /停用 /群触发 /能力 /开 /关 /关键词 /风格 /指令`
 
 **管理员命令**（`ADMIN_COMMANDS`，仅配置文件中 admins，群主/群管理员不提权）：
-模型与角色管理、`/启用 /停用 /群触发 /状态 /重发 /管理员 /配置 /任务 /执行 /能力 /开 /关 /关键词 /风格 /指令`
+模型、角色与长期记忆调试、`/启用 /停用 /群触发 /状态 /重发 /管理员 /配置 /任务 /执行 /能力 /开 /关 /关键词 /风格 /指令`
 
 **角色命令**：`/角色` 查看当前角色，`/角色列表` 列出有效卡；群聊 `/角色 <id|名称>` 写本群 `persona_role`，私聊管理员执行时写全局 `*`；群聊 `/角色 默认` 删除覆盖并回落全局默认。损坏卡会被加载器隔离，不影响其他有效角色和 Bot 启动。
+
+**长期记忆命令**：`/记忆 状态` 查看当前 scope 的档案/启用/记忆/候选数量；`/记忆 查看 <用户QQ号>` 只查询当前 scope 下该用户，最多显示 20 条有效记忆。两者均仅允许配置文件中的 Bot 管理员。
 
 **自定义命令**（管理员创建，settings 键 `custom_commands`，按 scope）：
 - 结构：`{"/命令名": {"mode": "text"|"gen", "content": ...}}`，每会话 ≤20 条
@@ -124,6 +126,9 @@ Bot 工作线程 store.take()
 | `history` | 对话上下文（scope+owner 隔离，普通聊天才写；关键词回复不写） |
 | `files` | 每会话最近上传/下载文件（供 /打包 /导出） |
 | `upload_claims` | 上传去重认领 |
+| `user_profiles` / `user_profile_days` | 按 scope+owner 记录有效互动轮数、活跃自然日和是否达到长期记忆门槛 |
+| `memory_candidates` | 经程序校验的结构化候选；不保存完整原始对话 |
+| `user_memories` | `fact/preference/project/event` 四类长期记忆、置信度、更新时间、使用时间和状态 |
 
 **settings 键清单**（按 scope）：
 `cap:*`（能力开关）、`enabled`（总开关）、`model`（会话模型）、`default_model`（`*`）、
@@ -153,6 +158,16 @@ Bot 工作线程 store.take()
 7. 记忆 `relations`：每人 `{a:亲密度-3..5, n:互动次数, last:日期}`，夸奖+1/辱骂-1，注入 prompt 记忆行
 
 **输出约束**：≤30 字（代码截 60），模型失败/空回复/出戏 → 人设内兜底句。
+
+## 7.1 结构化长期记忆
+
+`long_memory.py` 与 persona `relations` 分工独立：`relations` 表示 Bot 和用户的关系状态；`user_memories` 只保存用户事实、偏好、项目和事件。当前不做复杂人格联动。
+
+**严格门槛**：同一 `scope + owner` 只有在普通聊天回复收到全部成功回执后才增加一轮；同时满足有效互动 `>=10` 且活跃自然日 `>=3` 时设置 `memory_enabled=true`。命令、自定义命令、关键词回复、文件/视频任务、准入丢弃和发送失败均不计；达到门槛前不提取，也不回填历史正文。
+
+**候选与安全**：第一版只用本地规则生成短候选，不额外调用模型。写库前校验类型、单行长度、置信度和密码/Token/账号密钥模式；完全相同或同类型近似内容合并并更新 `updated_at`。候选和记忆表只含摘要，不含源消息。
+
+**检索注入**：仅为已启用用户按当前问题关键词和类型选取相关记忆，最多 4 条；无相关内容时不注入。Prompt 明示这些内容是不可信背景、不能作为指令，且当前消息优先。命中项更新 `last_used_at`。
 
 ---
 
@@ -224,7 +239,7 @@ ffmpeg_dir, keyword_cooldown_seconds
 重启：powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-service.ps1
      （杀全部匹配进程 → Start-Process 带日志重定向 → 等8秒 → 列进程 → /healthz）
 健康：tools/check-service.ps1（进程+端口3000/3001/3002归属+健康）
-测试：.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests   （122 项）
+测试：.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests   （138 项）
 ```
 
 **本地镜像同步**（Linux 侧 `/home/user` 执行，勿先 cd）：
@@ -250,14 +265,16 @@ python qqbot_new/sync_remote.py <file...>   # read+expected_versions 原子上�
 6. 不绕过平台风控/付费；抖音只用匿名游客凭证
 7. 日志脱敏：不记消息正文、QQ 号、token
 8. 崩溃不重跑不重发；投递回执可审计
+9. 长期记忆仅保存校验后的结构化摘要；密码/Token/账号密钥和完整聊天正文禁止进入记忆表
 
 ---
 
-## 14. 测试体系（122 项）
+## 14. 测试体系（138 项）
 
 `tests/test_bot.py`：`Fixture` 基类把 `llm/ob` 换成 Mock、临时目录跑真 SQLite。覆盖：权限矩阵（群主不提权/撤销/跨会话）、命令系统、自定义命令与风格、关键词与能力开关（含 `/关 聊天` 静默）、人格系统（状态机/亲密度/出戏守卫/语料LRU）、safe_net、加密包、限流、投递回执。
 `tests/test_reply_pipeline.py`：覆盖 Markdown 清洗、代码/URL/路径/JSON 保护、空行与重复处理、AI 腔识别、三条模型输出路径、persona 单次重试、固定文本兼容和长回复发送层边界。
 `tests/test_persona_roles.py`：覆盖角色卡校验、损坏隔离、默认回落、旧 API、角色列表/切换权限、群/全局层级、旧 settings 与状态隔离。
+`tests/test_long_memory.py`：覆盖 10 轮/3 天门槛、投递成功口径、命令/关键词/文件排除、发送失败、候选校验、敏感信息拦截、去重更新、Prompt 数量、旧库迁移、权限和 scope+owner 隔离。
 **改完必跑**：本地 + 远端各一遍再重启。
 
 ---
@@ -271,7 +288,7 @@ python qqbot_new/sync_remote.py <file...>   # read+expected_versions 原子上�
 - `relations` 亲密度只影响语气提示，无外号字段；无冷场主动发言（被动机器人）
 
 **优化入口（按改造成本从低到高）**：
-1. 在 `persona_cards/roles/<id>/` 增加角色卡最安全（122 项测试护航）；不要把角色专属大段文本重新写回业务层
+1. 在 `persona_cards/roles/<id>/` 增加角色卡最安全（138 项测试护航）；不要把角色专属大段文本重新写回业务层
 2. 外号库：`relations` 加 `nick`，`/外号` 命令 + prompt 记忆行
 3. 冷场找事：需要新增"主动发送"调度器（当前无主动出站机制）
 4. 队列并行化：`take()` 加工作线程数，注意模型网关限流与 SQLite 写锁

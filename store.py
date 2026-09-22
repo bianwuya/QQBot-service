@@ -18,6 +18,23 @@ class Store:
         CREATE TABLE IF NOT EXISTS settings(scope TEXT,key TEXT,value TEXT,PRIMARY KEY(scope,key));
         CREATE TABLE IF NOT EXISTS history(scope TEXT,owner TEXT,role TEXT,content TEXT,created REAL);
         CREATE TABLE IF NOT EXISTS files(scope TEXT,owner TEXT,path TEXT,name TEXT,created REAL,PRIMARY KEY(scope,owner));
+        CREATE TABLE IF NOT EXISTS user_profiles(
+            scope TEXT,owner TEXT,interaction_count INTEGER NOT NULL,active_days INTEGER NOT NULL,
+            first_seen REAL NOT NULL,last_seen REAL NOT NULL,memory_enabled INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(scope,owner));
+        CREATE TABLE IF NOT EXISTS user_profile_days(
+            scope TEXT,owner TEXT,active_date TEXT,PRIMARY KEY(scope,owner,active_date));
+        CREATE TABLE IF NOT EXISTS user_memories(
+            id TEXT PRIMARY KEY,scope TEXT,owner TEXT,type TEXT NOT NULL,content TEXT NOT NULL,
+            confidence REAL NOT NULL,created_at REAL NOT NULL,updated_at REAL NOT NULL,
+            last_used_at REAL,status TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS memory_candidates(
+            id TEXT PRIMARY KEY,scope TEXT,owner TEXT,type TEXT NOT NULL,content TEXT NOT NULL,
+            confidence REAL NOT NULL,created_at REAL NOT NULL,status TEXT NOT NULL,memory_id TEXT);
+        CREATE UNIQUE INDEX IF NOT EXISTS memory_candidate_content
+            ON memory_candidates(scope,owner,type,content);
+        CREATE INDEX IF NOT EXISTS memory_lookup
+            ON user_memories(scope,owner,status,updated_at DESC);
         ''')
         # Do not rerun paid work or resend an uncertain delivery after a crash.
         with self.db:
@@ -83,6 +100,68 @@ class Store:
             self.db.execute('DELETE FROM history WHERE rowid IN (SELECT rowid FROM history WHERE scope=? AND owner=? ORDER BY created DESC LIMIT -1 OFFSET 12)',(scope,owner))
     def reset(self,scope,owner):
         with self.lock,self.db:self.db.execute('DELETE FROM history WHERE scope=? AND owner=?',(scope,owner))
+    def memory_profile(self,scope,owner):
+        with self.lock:
+            row=self.db.execute('SELECT * FROM user_profiles WHERE scope=? AND owner=?',(scope,owner)).fetchone()
+            if not row:return None
+            result=dict(row);result['memory_enabled']=bool(result['memory_enabled']);return result
+    def record_memory_interaction(self,scope,owner,now=None,day=None):
+        now=time.time() if now is None else float(now)
+        day=day or time.strftime('%Y-%m-%d',time.localtime(now))
+        with self.lock,self.db:
+            row=self.db.execute('SELECT * FROM user_profiles WHERE scope=? AND owner=?',(scope,owner)).fetchone()
+            if row is None:
+                self.db.execute('INSERT INTO user_profiles VALUES(?,?,?,?,?,?,?)',(scope,owner,0,0,now,now,0))
+                interaction_count=0;enabled=False
+            else:
+                interaction_count=int(row['interaction_count']);enabled=bool(row['memory_enabled'])
+            self.db.execute('INSERT OR IGNORE INTO user_profile_days VALUES(?,?,?)',(scope,owner,day))
+            active_days=self.db.execute('SELECT count(*) FROM user_profile_days WHERE scope=? AND owner=?',(scope,owner)).fetchone()[0]
+            interaction_count+=1;enabled=enabled or (interaction_count>=10 and active_days>=3)
+            self.db.execute('UPDATE user_profiles SET interaction_count=?,active_days=?,last_seen=?,memory_enabled=? WHERE scope=? AND owner=?',
+                            (interaction_count,active_days,now,int(enabled),scope,owner))
+        return self.memory_profile(scope,owner)
+    def memory_stats(self,scope):
+        with self.lock:
+            profiles=self.db.execute('SELECT count(*) FROM user_profiles WHERE scope=?',(scope,)).fetchone()[0]
+            enabled=self.db.execute('SELECT count(*) FROM user_profiles WHERE scope=? AND memory_enabled=1',(scope,)).fetchone()[0]
+            memories=self.db.execute("SELECT count(*) FROM user_memories WHERE scope=? AND status='active'",(scope,)).fetchone()[0]
+            candidates=self.db.execute('SELECT count(*) FROM memory_candidates WHERE scope=?',(scope,)).fetchone()[0]
+        return {'profiles':profiles,'enabled':enabled,'memories':memories,'candidates':candidates}
+    def list_memories(self,scope,owner,status='active',limit=100):
+        limit=max(1,min(int(limit),200))
+        with self.lock:
+            rows=self.db.execute('SELECT * FROM user_memories WHERE scope=? AND owner=? AND status=? ORDER BY updated_at DESC LIMIT ?',
+                                 (scope,owner,status,limit)).fetchall()
+            return [dict(row) for row in rows]
+    def add_memory_candidate(self,scope,owner,candidate,now=None):
+        now=time.time() if now is None else float(now)
+        with self.lock,self.db:
+            row=self.db.execute('SELECT id FROM memory_candidates WHERE scope=? AND owner=? AND type=? AND content=?',
+                                (scope,owner,candidate['type'],candidate['content'])).fetchone()
+            if row:return row['id']
+            ident=uuid.uuid4().hex
+            self.db.execute('INSERT INTO memory_candidates VALUES(?,?,?,?,?,?,?,?,?)',
+                            (ident,scope,owner,candidate['type'],candidate['content'],candidate['confidence'],now,'pending',None))
+            return ident
+    def mark_memory_candidate(self,ident,status,memory_id=None):
+        with self.lock,self.db:self.db.execute('UPDATE memory_candidates SET status=?,memory_id=? WHERE id=?',(status,memory_id,ident))
+    def add_memory(self,scope,owner,candidate,now=None):
+        now=time.time() if now is None else float(now);ident=uuid.uuid4().hex
+        with self.lock,self.db:
+            self.db.execute('INSERT INTO user_memories VALUES(?,?,?,?,?,?,?,?,?,?)',
+                            (ident,scope,owner,candidate['type'],candidate['content'],candidate['confidence'],now,now,None,'active'))
+        return ident
+    def update_memory(self,ident,content,confidence,now=None):
+        now=time.time() if now is None else float(now)
+        with self.lock,self.db:
+            self.db.execute('UPDATE user_memories SET content=?,confidence=?,updated_at=? WHERE id=?',
+                            (content,float(confidence),now,ident))
+    def touch_memories(self,idents,now=None):
+        if not idents:return
+        now=time.time() if now is None else float(now)
+        marks=','.join('?' for _ in idents)
+        with self.lock,self.db:self.db.execute('UPDATE user_memories SET last_used_at=? WHERE id IN ('+marks+')',(now,*idents))
     def set_file(self,scope,owner,path,name):
         with self.lock,self.db:self.db.execute('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?)',(scope,owner,str(path),name,time.time()))
     def file(self,scope,owner):
