@@ -28,7 +28,7 @@ def output_instruction(role, intent=None):
         lead = '日常一两句、约30字内；解释技术或安抚情绪最多{}字，先答对再带口吻。'.format(limit)
     else:
         lead = '先答对再带口吻；当前情境最多{}字，复杂问题可分点说明。'.format(limit)
-    return lead + base + '。'
+    return lead + base + '；回复严格控制在{}字内，超出的内容会被直接截掉。'.format(limit)
 
 
 def behavior_block(role, intent=None):

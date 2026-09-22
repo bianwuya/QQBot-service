@@ -158,12 +158,13 @@ class LLM:
         finally:s.close()
     def models(self):
         return sorted({x['id'] for x in self.request('/models').get('data',[]) if isinstance(x.get('id'),str)})
-    def chat(self,model,messages):
+    def chat(self,model,messages,max_tokens=None,mark_length=True):
         # Deliberately no tools/functions, command execution or Agent client in any model request.
-        data=self.request('/chat/completions',{'model':model,'messages':messages,'stream':False,'max_tokens':self.cfg.get('max_tokens',4096)})
+        tokens=max_tokens if isinstance(max_tokens,int) and max_tokens>0 else self.cfg.get('max_tokens',4096)
+        data=self.request('/chat/completions',{'model':model,'messages':messages,'stream':False,'max_tokens':tokens})
         choices=data.get('choices') or []
         if not choices:raise Rejected('模型没有返回答案')
         choice=choices[0];answer=choice.get('message',{}).get('content')
         if not isinstance(answer,str) or not answer.strip():raise Rejected('模型返回空答案')
-        if choice.get('finish_reason')=='length':answer+='\n\n[模型达到输出上限，以上内容可能不完整。可继续追问。]'
+        if choice.get('finish_reason')=='length' and mark_length:answer+='\n\n[模型达到输出上限，以上内容可能不完整。可继续追问。]'
         return answer

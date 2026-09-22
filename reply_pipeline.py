@@ -131,7 +131,7 @@ def _dedupe_sentences(text):
     return '\n'.join(output_lines)
 
 
-def _safe_truncate(text, limit):
+def _safe_truncate(text, limit, tail=None):
     if len(text) <= limit:
         return text, False
     cut = limit
@@ -145,7 +145,10 @@ def _safe_truncate(text, limit):
             if match.start() < cut < match.end():
                 cut = match.start() if match.start() >= int(limit*0.5) else match.end()
                 break
-    return text[:cut].rstrip(), True
+    shortened = text[:cut].rstrip()
+    if tail and shortened and not shortened.endswith(tail):
+        shortened = shortened[:max(0, limit - len(tail))].rstrip() + tail
+    return shortened, True
 
 
 def clean_reply(text, context_type=NORMAL_CHAT):
@@ -177,7 +180,7 @@ def validate_reply(text, context_type=NORMAL_CHAT, ooc_check=None):
     return False, None
 
 
-def process_reply(text, context_type=NORMAL_CHAT, max_chars=None, ooc_check=None):
+def process_reply(text, context_type=NORMAL_CHAT, max_chars=None, ooc_check=None, tail=None):
     """Clean, validate and length-bound one model-generated reply."""
     context_type = _context(context_type)
     retry, reason = validate_reply(text, context_type, ooc_check=ooc_check)
@@ -185,7 +188,7 @@ def process_reply(text, context_type=NORMAL_CHAT, max_chars=None, ooc_check=None
     if not cleaned and not retry:
         cleaned = str(text or '').strip()
         reason = reason or 'empty_after_cleanup'
-    cleaned, truncated = _safe_truncate(cleaned, _max_chars(max_chars))
+    cleaned, truncated = _safe_truncate(cleaned, _max_chars(max_chars), tail)
     if truncated:
         reason = reason or 'max_length'
     return ReplyResult(cleaned, retry, reason)

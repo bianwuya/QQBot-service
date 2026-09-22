@@ -240,13 +240,15 @@ class Bot:
     def persona_answer(self,scope,messages,role,intent,used):
         """Persona LLM call with existing retry-once/fallback semantics; counts only."""
         try:
-            answer=self.llm.chat(self.model(scope),messages)
+            limit=persona.reply_limit(role,intent)
+            budget=max(160,int(limit*1.5)+64)
+            answer=self.llm.chat(self.model(scope),messages,max_tokens=budget,mark_length=False)
             checker=lambda value:persona.ooc_check(value,role)
-            checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
+            checked=process_reply(answer,PERSONA_CHAT,max_chars=limit,ooc_check=checker,tail='……')
             if checked.retry:
                 self.persona_metric(scope,'ooc_retry')
-                answer=self.llm.chat(self.model(scope),messages)
-                checked=process_reply(answer,PERSONA_CHAT,max_chars=persona.reply_limit(role,intent),ooc_check=checker)
+                answer=self.llm.chat(self.model(scope),messages,max_tokens=budget,mark_length=False)
+                checked=process_reply(answer,PERSONA_CHAT,max_chars=limit,ooc_check=checker,tail='……')
             generated=not checked.retry and bool(checked.text)
             if generated:
                 answer=checked.text
