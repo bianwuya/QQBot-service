@@ -57,3 +57,14 @@
 ## 迭代流程
 按方法论四阶段：冷启动（本版）→ 观察期一周，管理员把出戏/不像的回复记入 `ooc.md` → 攒 20 条样本后收敛根因改语料 → 长期每月扩语料。
 下一步候选：群友征集外号库（`relations` 加 `nick` 字段）、冷场主动找事状态、隐藏"真话窗口"低概率状态。
+
+## P7.1 质量收敛（当前行为，细化第 4～6 层）
+
+- 意图分层：每条入群文本先经 `persona_cards/intents.py` 本地规则分类（greeting/chat/tech_help/emotional/flirt/insult/correction/boundary/identity/memory/unclear）。意图只影响采样、长度档位与兜底选择，永不拦截回复。
+- 长度档位：`reply_limits.tiers`（chat 60、unclear 80、tech_help 200、emotional 160、correction 120、identity/memory 80、flirt/insult/boundary 60），输出指令随档位生成；旧卡无 tiers 时仍按 `max_chars`。
+- 状态分层：个人脆弱态存 `persona_react:<role>`（scope 内按 owner 分桶）；旧 `persona_state` 只作一次性迁移读取源并镜像兼容，不删除。群余温存 `persona_mood:<role>`：触发脆弱 → flustered 带 2 条，越界拒绝 → hurt 带 1 条，逐条衰减归零回 calm；余温只改语气不改事实。
+- 语料重组：14 个情境分类约 70 条；状态计划只取氛围料，`intent_plans` 按意图补情境料；`identity_deflect`/`honest_admit` 专供身份策略。fallbacks 按意图选择（tech_help/emotional/boundary/unclear/identity/generic），旧平铺数组仍可加载。
+- 身份策略：`persona_identity_probe` 按 owner 记 `{n, day}`，自然日重置。首问且无严肃词 → 打岔（不确认不否认不撒谎，不谎称真人）；二问或严肃词 → 直接口吻化承认是 Bot 程序。严肃词表在 `card.json` 的 `intents.serious_markers`。
+- OOC 结构化：`ooc.hard` 与 `ooc.service_tone`（正则）命中 → 保持原流程：重试一次再兜底；`ooc.soft` 命中且未被 `ooc.soft_allow` 豁免 → 只记风格告警计数，不重试不兜底；`honest_admit` 语料显式通过 OOC，与词表互斥由测试断言。
+- 情境行为：`behaviors` 当前意图完整规则 + 其余意图一句话索引进 prompt；缺字段旧卡降级为原 `social_behavior` 段。
+- 运维：`/人格状态`（仅管理员）显示角色、本人状态名、群氛围、关系档位与 OOC 重试/风格告警/兜底计数，只含状态名与计数；`tools/persona_eval.py` 离线重放 14 固定场景写入 `state/persona-eval/<时间戳>/report.md`，不经 `app.py`、不写生产库、不发 QQ。
