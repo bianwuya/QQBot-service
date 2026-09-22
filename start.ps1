@@ -5,6 +5,8 @@ $Nap = Join-Path (Split-Path $Root -Parent) 'NapCat-runtime'
 $napExe = Join-Path $Nap 'node.exe'
 $existing = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $napExe })
 if ($existing.Count -eq 0) {
+    $ffmpegDir = Join-Path $Root 'tools'
+    if (($env:PATH -split ';') -notcontains $ffmpegDir) { $env:PATH = $ffmpegDir + ';' + $env:PATH }
     $env:NAPCAT_USERDATA_PATH = Join-Path $Nap 'profile'
     $env:NAPCAT_WORKDIR = Join-Path $Nap 'napcat'
     $env:NAPCAT_DISABLE_TIME_SYNC = '1'
