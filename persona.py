@@ -8,7 +8,10 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            finish_turn as _finish_turn, load_catalog,
                            classify as _classify_intent,
                            limit_for as _limit_for,
+                           finish_mood as _finish_mood,
+                           load_mood as _load_mood,
                            load_runtime as _load_runtime,
+                           mood_line as _mood_line,
                            ooc_check as _ooc_check,
                            relation_level as _relation_level,
                            reply_limit as _reply_limit,
@@ -99,12 +102,12 @@ def build_prompt(role, state, relation, context=None):
                          legacy_relation, {'used': legacy_used})
 
 
-def load_runtime(store, scope, role):
-    return _load_runtime(store, scope, role)
+def load_runtime(store, scope, role, owner=None):
+    return _load_runtime(store, scope, role, owner)
 
 
-def save_runtime(store, scope, role, state, used):
-    return _save_runtime(store, scope, role, state, used)
+def save_runtime(store, scope, role, state, used, owner=None):
+    return _save_runtime(store, scope, role, state, used, owner)
 
 
 def begin_turn(role, state, text):
@@ -113,6 +116,18 @@ def begin_turn(role, state, text):
 
 def finish_turn(role, state, triggered):
     return _finish_turn(role, state, triggered)
+
+
+def load_mood(store, scope, role):
+    return _load_mood(store, scope, role)
+
+
+def mood_line(role, mood):
+    return _mood_line(role, mood)
+
+
+def finish_mood(store, scope, role, mood, triggered, intent=None):
+    return _finish_mood(store, scope, role, mood, triggered, intent)
 
 
 def reply_limit(role, intent=None):

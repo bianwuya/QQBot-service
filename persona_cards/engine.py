@@ -118,6 +118,9 @@ def build_prompt(role, state, relation, context):
     if mode not in role.states['modes']:
         mode = role.states['default']
     state_label, corpus_block, chosen = examples_for(role, mode, used)
+    mood_line = str(context.get('mood_line', '')).strip()
+    if mood_line:
+        state_label += '\n'+mood_line
     memory = '互动次数：{}｜亲密度：{}｜最后见面：{}'.format(
         relation.get('n', 0), relation_level(role, relation.get('a', 0)), relation.get('last') or '初次')
     values = {
