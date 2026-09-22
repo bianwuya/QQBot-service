@@ -6,6 +6,8 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            examples_for as _examples_for,
                            fallback_line as _fallback_line,
                            finish_turn as _finish_turn, load_catalog,
+                           classify as _classify_intent,
+                           limit_for as _limit_for,
                            load_runtime as _load_runtime,
                            ooc_check as _ooc_check,
                            relation_level as _relation_level,
@@ -47,6 +49,10 @@ def role_for(store, scope):
 
 def role_selection_scope(scope):
     return selection_scope(scope)
+
+
+def classify_intent(role, text):
+    return _classify_intent(role, text)
 
 
 def flirt_hit(text, role=None):
@@ -107,5 +113,5 @@ def finish_turn(role, state, triggered):
     return _finish_turn(role, state, triggered)
 
 
-def reply_limit(role):
-    return _reply_limit(role)
+def reply_limit(role, intent=None):
+    return _limit_for(role, intent) if intent is not None else _reply_limit(role)

@@ -28,6 +28,20 @@
   },
   "reply_limits": {
     "max_chars": 500,
+    "default_max": 500,
+    "tiers": {
+      "chat": 500,
+      "greeting": 500,
+      "unclear": 500,
+      "tech_help": 500,
+      "emotional": 500,
+      "correction": 500,
+      "boundary": 500,
+      "identity": 500,
+      "memory": 500,
+      "flirt": 500,
+      "insult": 500
+    },
     "instruction": "只输出回复本身，不要添加身份声明或无关前缀。"
   },
   "social_behavior": "礼貌回应，不强行拉近关系，不因用户身份改变权限判断。",

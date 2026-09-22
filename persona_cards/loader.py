@@ -125,8 +125,17 @@ def _validate(card, corpus, directory):
     limits = card['reply_limits']
     if not isinstance(limits, dict) or not isinstance(limits.get('max_chars'), int) or limits['max_chars'] < 1:
         raise RoleCardError(f'{directory.name}: reply_limits.max_chars must be positive')
+    default_max = limits.get('default_max', limits['max_chars'])
+    if not isinstance(default_max, int) or default_max < 1:
+        raise RoleCardError(f'{directory.name}: reply_limits.default_max must be positive when present')
+    tiers = limits.get('tiers', {})
+    if tiers is not None and (not isinstance(tiers, dict) or not all(isinstance(key, str) and isinstance(value, int) and value > 0 for key, value in tiers.items())):
+        raise RoleCardError(f'{directory.name}: reply_limits.tiers must map intent names to positive integers')
     if not isinstance(limits.get('instruction'), str) or not limits['instruction'].strip():
         raise RoleCardError(f'{directory.name}: reply_limits.instruction is required')
+    intents = card.get('intents')
+    if intents is not None and (not isinstance(intents, dict) or not all(isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value) for value in intents.values())):
+        raise RoleCardError(f'{directory.name}: intents must map names to non-empty string lists')
     if not isinstance(corpus, dict) or not isinstance(corpus.get('categories'), dict):
         raise RoleCardError(f'{directory.name}: corpus categories are required')
     if not all(_string_list(items) for items in corpus['categories'].values()):

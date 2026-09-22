@@ -7,6 +7,29 @@ def trigger_hit(role, trigger_name, text):
     return next((word for word in role.triggers.get(trigger_name, []) if word in text), None)
 
 
+def limit_for(role, intent=None):
+    limits = role.reply_limits
+    tiers = limits.get('tiers') if isinstance(limits.get('tiers'), dict) else {}
+    if isinstance(intent, str):
+        value = tiers.get(intent)
+        if isinstance(value, int) and value > 0:
+            return value
+    value = limits.get('default_max')
+    if isinstance(value, int) and value > 0:
+        return value
+    return int(limits['max_chars'])
+
+
+def output_instruction(role, intent=None):
+    limit = limit_for(role, intent)
+    base = str(role.reply_limits['instruction']).rstrip('。')
+    if limit <= 80:
+        lead = '日常一两句、约30字内；解释技术或安抚情绪最多{}字，先答对再带口吻。'.format(limit)
+    else:
+        lead = '先答对再带口吻；当前情境最多{}字，复杂问题可分点说明。'.format(limit)
+    return lead + base + '。'
+
+
 def ooc_check(role, text):
     return any(word in (text or '') for word in role.data.get('ooc_words', []))
 
@@ -87,7 +110,7 @@ def build_prompt(role, state, relation, context):
         'memory': memory,
         'social_behavior': role.data['social_behavior'],
         'memory_behavior': role.data['memory_behavior'],
-        'output_instruction': role.reply_limits['instruction'],
+        'output_instruction': output_instruction(role, context.get('intent')),
     }
     try:
         prompt = role.prompt.format(**values)
