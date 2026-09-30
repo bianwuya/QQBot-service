@@ -87,6 +87,14 @@ class ReviewedCorpus(unittest.TestCase):
         pools = [line for pool in CATS.values() for line in pool]
         self.assertFalse(refs.intersection(pools))
 
+    def test_combat_phrases_are_rewritten(self):
+        for text in ('本小姐真骂起来怕你接不住', '这种话本小姐可不接啦', '先管好你自己吧，前辈~', '想嘴炮我奉陪'):
+            with self.subTest(text=text):
+                self.assertEqual(persona.ooc_scan(text, ROLE, 'chat')['kind'], 'service_tone')
+        self.assertIsNone(persona.ooc_scan('嗯？再多说半句嘛，本小姐就能接住啦~', ROLE, 'unclear')['kind'])
+        pools = [line for pool in CATS.values() for line in pool]
+        self.assertFalse([line for line in pools if '管好你自己' in line])
+
 
 if __name__ == '__main__':
     unittest.main()
