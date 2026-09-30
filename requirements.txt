@@ -4,3 +4,4 @@ yt-dlp==2026.8.19
 pypdf==6.18.1
 pyzipper==0.3.6
 websocket-client==1.9.0
+Pillow==12.3.0

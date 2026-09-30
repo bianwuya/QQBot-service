@@ -6,8 +6,17 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            examples_for as _examples_for,
                            fallback_line as _fallback_line,
                            finish_turn as _finish_turn, load_catalog,
+                           classify as _classify_intent,
+                           serious_marker_hit as _serious_marker_hit,
+                           limit_for as _limit_for,
+                           finish_mood as _finish_mood,
+                           load_mood as _load_mood,
+                           load_identity_probe as _load_identity_probe,
                            load_runtime as _load_runtime,
+                           mood_line as _mood_line,
+                           note_identity_probe as _note_identity_probe,
                            ooc_check as _ooc_check,
+                           ooc_scan as _ooc_scan,
                            relation_level as _relation_level,
                            reply_limit as _reply_limit,
                            resolve_role as _resolve_role,
@@ -26,8 +35,11 @@ CORE = XIAOZAYU.data['core']
 SURFACE = XIAOZAYU.data['surface']+' '+XIAOZAYU.data['speech_style']
 REACTION_CHAIN = XIAOZAYU.states.get('reaction_chain', '')
 CORPUS = XIAOZAYU.corpus['categories']
-OOC_WORDS = tuple(XIAOZAYU.data.get('ooc_words', []))
-FALLBACKS = list(XIAOZAYU.corpus['fallbacks'])
+OOC_WORDS = tuple((XIAOZAYU.data.get('ooc') or {}).get('hard')
+                 or XIAOZAYU.data.get('ooc_words', []))
+_FALLBACK_SOURCE = XIAOZAYU.corpus['fallbacks']
+FALLBACKS = (list(_FALLBACK_SOURCE.get('generic', [])) if isinstance(_FALLBACK_SOURCE, dict)
+             else list(_FALLBACK_SOURCE))
 FLIRT_WORDS = tuple(XIAOZAYU.triggers.get('flirt', []))
 INSULT_WORDS = tuple(XIAOZAYU.triggers.get('insult', []))
 FR_ROUNDS = int(XIAOZAYU.states.get('trigger_rounds', 0))
@@ -49,6 +61,10 @@ def role_selection_scope(scope):
     return selection_scope(scope)
 
 
+def classify_intent(role, text):
+    return _classify_intent(role, text)
+
+
 def flirt_hit(text, role=None):
     return _trigger_hit(role or XIAOZAYU, 'flirt', text)
 
@@ -57,16 +73,20 @@ def insult_hit(text, role=None):
     return _trigger_hit(role or XIAOZAYU, 'insult', text)
 
 
-def ooc_check(text, role=None):
-    return _ooc_check(role or XIAOZAYU, text)
+def ooc_check(text, role=None, intent=None):
+    return _ooc_check(role or XIAOZAYU, text, intent)
 
 
-def fallback_line(used, role=None):
-    return _fallback_line(role or XIAOZAYU, used)
+def ooc_scan(text, role=None, intent=None):
+    return _ooc_scan(role or XIAOZAYU, text, intent)
 
 
-def examples_for(mode, used, role=None):
-    return _examples_for(role or XIAOZAYU, mode, used)
+def fallback_line(used, role=None, intent=None):
+    return _fallback_line(role or XIAOZAYU, used, intent)
+
+
+def examples_for(mode, used, role=None, intent=None):
+    return _examples_for(role or XIAOZAYU, mode, used, intent)
 
 
 def relation_level(affinity, role=None):
@@ -91,12 +111,12 @@ def build_prompt(role, state, relation, context=None):
                          legacy_relation, {'used': legacy_used})
 
 
-def load_runtime(store, scope, role):
-    return _load_runtime(store, scope, role)
+def load_runtime(store, scope, role, owner=None):
+    return _load_runtime(store, scope, role, owner)
 
 
-def save_runtime(store, scope, role, state, used):
-    return _save_runtime(store, scope, role, state, used)
+def save_runtime(store, scope, role, state, used, owner=None):
+    return _save_runtime(store, scope, role, state, used, owner)
 
 
 def begin_turn(role, state, text):
@@ -107,5 +127,29 @@ def finish_turn(role, state, triggered):
     return _finish_turn(role, state, triggered)
 
 
-def reply_limit(role):
-    return _reply_limit(role)
+def load_mood(store, scope, role):
+    return _load_mood(store, scope, role)
+
+
+def mood_line(role, mood):
+    return _mood_line(role, mood)
+
+
+def finish_mood(store, scope, role, mood, triggered, intent=None):
+    return _finish_mood(store, scope, role, mood, triggered, intent)
+
+
+def reply_limit(role, intent=None):
+    return _limit_for(role, intent) if intent is not None else _reply_limit(role)
+
+def serious_marker_hit(role, text):
+    return _serious_marker_hit(role, text)
+
+
+def identity_probe(store, scope, owner):
+    return _load_identity_probe(store, scope, owner)
+
+
+def note_identity_probe(store, scope, owner):
+    return _note_identity_probe(store, scope, owner)
+

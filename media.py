@@ -1,10 +1,11 @@
 """Supported video shares -> bounded local MP4. No shell command interpolation."""
+import hashlib
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urljoin,urlsplit
+from urllib.parse import urljoin,urlsplit,urlunsplit
 from safe_net import PinnedHTTPS, Rejected, download, public_target, resolve_public, safe_name
 
 PLATFORMS={'bilibili':('bilibili.com','b23.tv'),'douyin':('douyin.com','iesdouyin.com'),'xiaohongshu':('xiaohongshu.com','xhslink.com')}
@@ -19,6 +20,21 @@ def platform_of(url):
             if any(host==d or host.endswith('.'+d) for d in domains):return platform
     except ValueError:pass
     return None
+
+def video_identity(url):
+    """Resolve allowed short links; store a digest, never the URL, in dedupe claims."""
+    platform=platform_of(url)
+    if not platform:raise Rejected('不支持的视频平台')
+    final=resolve_public(url,lambda host:any(host==d or host.endswith('.'+d) for d in PLATFORMS[platform]))
+    split=urlsplit(final);path=split.path.rstrip('/')
+    patterns={'bilibili':r'/video/(BV[a-zA-Z0-9]+|av\d+)',
+              'douyin':r'/video/(\d+)',
+              'xiaohongshu':r'/(?:explore|discovery/item)/(\w+)'}
+    found=re.search(patterns[platform],path,re.I)
+    # Unknown URL forms keep their query: it can contain the actual media ID.
+    canonical=(found.group(1) if found else urlunsplit(('',split.hostname or '',path,split.query,'')))
+    digest=hashlib.sha256((platform+':'+canonical).encode()).hexdigest()
+    return platform,digest
 
 def share_urls(segments):
     values=[]

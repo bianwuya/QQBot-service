@@ -1,36 +1,187 @@
 """Role-independent prompt, trigger, relation and corpus behavior."""
+import re
 import time
 
 
 def trigger_hit(role, trigger_name, text):
     text = text or ''
-    return next((word for word in role.triggers.get(trigger_name, []) if word in text), None)
+    triggers = getattr(role, 'triggers', None)
+    if triggers is None:
+        data = getattr(role, 'data', {}) or {}
+        triggers = data.get('triggers', {}) if isinstance(data, dict) else {}
+    if not isinstance(triggers, dict):
+        return None
+    for word in triggers.get(trigger_name, []):
+        if not isinstance(word, str) or not word or word not in text:
+            continue
+        if getattr(role, 'id', None) == 'xiaozayu' and trigger_name == 'flirt':
+            # Third-person or negated remarks are not praise addressed to her.
+            if word in ('喜欢你', '爱你') and re.search(
+                    r'(?:不|没|他|她|别人|谁).{0,2}' + re.escape(word), text):
+                continue
+            if word == '喜欢你' and re.search(r'喜欢你(?:的|写|做|提|这|那)', text):
+                continue
+        return word
+    return None
 
 
-def ooc_check(role, text):
-    return any(word in (text or '') for word in role.data.get('ooc_words', []))
+def limit_for(role, intent=None):
+    limits = role.reply_limits
+    tiers = limits.get('tiers') if isinstance(limits.get('tiers'), dict) else {}
+    if isinstance(intent, str):
+        value = tiers.get(intent)
+        if isinstance(value, int) and value > 0:
+            return value
+    value = limits.get('default_max')
+    if isinstance(value, int) and value > 0:
+        return value
+    return int(limits['max_chars'])
 
 
-def fallback_line(role, used):
+def output_instruction(role, intent=None):
+    limit = limit_for(role, intent)
+    base = str(role.reply_limits['instruction']).rstrip('。')
+    if limit <= 80:
+        lead = '日常一两句、约30字内；解释技术或安抚情绪最多{}字，先答对再带口吻。'.format(limit)
+    else:
+        lead = '先答对再带口吻；当前情境最多{}字，复杂问题可分点说明。'.format(limit)
+    return lead + base + '；回复严格控制在{}字内，超出的内容会被直接截掉。'.format(limit)
+
+
+def behavior_block(role, intent=None):
+    behaviors = role.data.get('behaviors')
+    if not isinstance(behaviors, dict) or not behaviors:
+        return role.data['social_behavior']
+    current = behaviors.get(intent) or behaviors.get('chat') or role.data['social_behavior']
+    order = ('greeting', 'tech_help', 'emotional', 'uncertain', 'correction',
+             'clarify', 'identity', 'memory', 'boundary', 'chat', 'flirt', 'insult')
+    index = []
+    for name in order:
+        if name == intent or name not in behaviors:
+            continue
+        summary = behaviors[name].replace('。', '；').split('；')[0]
+        index.append(name+'：'+summary)
+    return current + ('\n其他情境索引：' + '；'.join(index) if index else '')
+
+
+_OOC_KEYS = ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow')
+
+
+def _ooc_config(role):
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    config = data.get('ooc')
+    if not isinstance(config, dict):
+        config = {}
+    merged = {}
+    for key in _OOC_KEYS:
+        values = config.get(key)
+        merged[key] = [str(value) for value in values] if isinstance(values, list) else []
+    legacy = data.get('ooc_words')
+    if isinstance(legacy, list):
+        for word in legacy:
+            word = str(word)
+            if word and word not in merged['hard']:
+                merged['hard'].append(word)
+    return merged
+
+
+def _regex_hit(patterns, text):
+    for pattern in patterns:
+        if not pattern:
+            continue
+        try:
+            if re.search(pattern, text):
+                return pattern
+        except re.error:
+            if pattern in text:
+                return pattern
+    return None
+
+
+def ooc_scan(role, text, intent=None):
+    text = text or ''
+    config = _ooc_config(role)
+    for word in config['hard']:
+        if word and word in text:
+            return {'retry': True, 'soft': False, 'kind': 'hard', 'matched': word}
+    service = _regex_hit(config['service_tone'], text)
+    if service:
+        return {'retry': True, 'soft': False, 'kind': 'service_tone', 'matched': service}
+    # Care is intentionally warmer; a role's sugary-voice rules must not
+    # discard a genuine supportive answer just for being gentle.
+    if intent not in ('emotional', 'boundary'):
+        sweet = _regex_hit(config['sweet_tone'], text)
+        if sweet:
+            return {'retry': True, 'soft': False, 'kind': 'sweet_tone', 'matched': sweet}
+    soft = next((word for word in config['soft'] if word and word in text), None)
+    if soft and not _regex_hit(config['soft_allow'], text):
+        return {'retry': False, 'soft': True, 'kind': 'soft', 'matched': soft}
+    return {'retry': False, 'soft': False, 'kind': None, 'matched': None}
+
+
+def ooc_check(role, text, intent=None):
+    return bool(ooc_scan(role, text, intent)['retry'])
+
+
+def ooc_prompt_words(role):
+    config = _ooc_config(role)
+    words = config['hard'] + config['service_tone']
+    return '／'.join(words) or '不得跳出角色自述模型身份'
+
+
+def fallback_line(role, used, intent=None):
     fallbacks = role.corpus['fallbacks']
-    return next((line for line in fallbacks if line not in used), fallbacks[0])
+    if isinstance(fallbacks, dict):
+        pool = fallbacks.get(intent) if isinstance(intent, str) else None
+        if not pool:
+            pool = fallbacks.get('generic') or []
+    else:
+        pool = fallbacks
+    return next((line for line in pool if line not in used), pool[0])
 
 
-def _pick(role, category, used, count):
+def _pick(role, category, used, count, variation=0):
     source = role.corpus['categories'].get(category, [])
     pool = [line for line in source if line not in used] or source
+    if pool and isinstance(variation, int):
+        shift = variation % len(pool)
+        pool = pool[shift:] + pool[:shift]
     return pool[:count]
 
 
-def examples_for(role, mode, used):
+_TASK_INTENTS = frozenset(('tech_help', 'emotional', 'identity', 'memory',
+                           'correction', 'boundary', 'unclear'))
+
+
+def examples_for(role, mode, used, intent=None, identity_path=None, variation=0):
+    # Identity probes rely on stable deflect/admit exemplars; keep those fixed.
+    if intent == 'identity':
+        variation = 0
     plans = role.corpus.get('plans', {})
     plan = plans.get(mode) or plans.get(role.states['default']) or []
+    # A generic mood plan used to leak cheerful/bragging examples into every
+    # task. Only playful chat/greetings/flirt/insults need those examples.
+    if intent in _TASK_INTENTS:
+        plan = []
+    elif role.id == 'xiaozayu' and intent == 'greeting':
+        # A plain hello supplies no premise to attack; do not hallucinate a
+        # previous exchange just because the generic chat plan suggests one.
+        plan = [['daily', 1]]
+    elif mode == role.states.get('trigger_mode') and intent != 'flirt' and role.id == 'xiaozayu':
+        # After the actual compliment, keep a trace of embarrassment without
+        # feeding the model two more rounds of blush-and-stammer examples.
+        plan = [['recover', 1], ['provocation', 1]]
+    intent_plans = role.corpus.get('intent_plans', {})
+    intent_plan = intent_plans.get(intent) if isinstance(intent, str) else None
+    if intent == 'identity' and identity_path in ('deflect', 'admit'):
+        category = 'identity_deflect' if identity_path == 'deflect' else 'honest_admit'
+        intent_plan = [[category, 2]]
     chosen = []
-    for entry in plan:
+    for entry in list(plan) + list(intent_plan or []):
         if not isinstance(entry, list) or len(entry) != 2:
             continue
         category, count = entry
-        chosen += _pick(role, category, used+chosen, max(0, int(count)))
+        chosen += _pick(role, category, used+chosen, max(0, int(count)), variation+len(chosen) if isinstance(variation,int) else 0)
     state = role.states.get('modes', {}).get(mode) or role.states['modes'][role.states['default']]
     return state['label'], '\n'.join('· '+line for line in chosen), chosen
 
@@ -70,9 +221,19 @@ def build_prompt(role, state, relation, context):
     mode = state.get('mode', role.states['default']) if isinstance(state, dict) else role.states['default']
     if mode not in role.states['modes']:
         mode = role.states['default']
-    state_label, corpus_block, chosen = examples_for(role, mode, used)
+    state_label, corpus_block, chosen = examples_for(
+        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0))
+    if (role.id == 'xiaozayu' and mode == role.states.get('trigger_mode')
+            and context.get('intent') != 'flirt'):
+        state_label = ('刚才失过半拍，现在已收拾好场面：不要再结巴、脸红或撒娇；'
+                       '先回应眼前的问题，轻松话题可嘴硬一句。')
+    mood_line = str(context.get('mood_line', '')).strip()
+    if mood_line:
+        state_label += '\n'+mood_line
+    count = relation.get('n', 0)
     memory = '互动次数：{}｜亲密度：{}｜最后见面：{}'.format(
-        relation.get('n', 0), relation_level(role, relation.get('a', 0)), relation.get('last') or '初次')
+        count, relation_level(role, relation.get('a', 0)),
+        relation.get('last') if count > 1 and relation.get('last') else '初次')
     values = {
         'display_name': role.display_name,
         'identity': role.data['identity'],
@@ -83,11 +244,12 @@ def build_prompt(role, state, relation, context):
         'state_label': state_label,
         'corpus_block': corpus_block or '· 保持自然、简洁并贴合角色定义。',
         'boundaries_block': '\n'.join('- '+line for line in role.data['boundaries']),
-        'ooc_words': '／'.join(role.data.get('ooc_words', [])) or '不得跳出角色自述模型身份',
+        'ooc_words': ooc_prompt_words(role),
         'memory': memory,
         'social_behavior': role.data['social_behavior'],
+        'behavior_block': behavior_block(role, context.get('intent')),
         'memory_behavior': role.data['memory_behavior'],
-        'output_instruction': role.reply_limits['instruction'],
+        'output_instruction': output_instruction(role, context.get('intent')),
     }
     try:
         prompt = role.prompt.format(**values)

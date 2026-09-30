@@ -125,17 +125,46 @@ def _validate(card, corpus, directory):
     limits = card['reply_limits']
     if not isinstance(limits, dict) or not isinstance(limits.get('max_chars'), int) or limits['max_chars'] < 1:
         raise RoleCardError(f'{directory.name}: reply_limits.max_chars must be positive')
+    default_max = limits.get('default_max', limits['max_chars'])
+    if not isinstance(default_max, int) or default_max < 1:
+        raise RoleCardError(f'{directory.name}: reply_limits.default_max must be positive when present')
+    tiers = limits.get('tiers', {})
+    if tiers is not None and (not isinstance(tiers, dict) or not all(isinstance(key, str) and isinstance(value, int) and value > 0 for key, value in tiers.items())):
+        raise RoleCardError(f'{directory.name}: reply_limits.tiers must map intent names to positive integers')
     if not isinstance(limits.get('instruction'), str) or not limits['instruction'].strip():
         raise RoleCardError(f'{directory.name}: reply_limits.instruction is required')
+    intents = card.get('intents')
+    if intents is not None and (not isinstance(intents, dict) or not all(isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value) for value in intents.values())):
+        raise RoleCardError(f'{directory.name}: intents must map names to non-empty string lists')
+    behaviors = card.get('behaviors')
+    if behaviors is not None and (not isinstance(behaviors, dict) or not all(isinstance(key, str) and isinstance(value, str) and value.strip() for key, value in behaviors.items())):
+        raise RoleCardError(f'{directory.name}: behaviors must map intent names to non-empty rules')
+    ooc_words = card.get('ooc_words')
+    if ooc_words is not None and not _string_list(ooc_words, allow_empty=True):
+        raise RoleCardError(f'{directory.name}: ooc_words must be a string list when present')
+    ooc = card.get('ooc')
+    if ooc is not None:
+        if not isinstance(ooc, dict):
+            raise RoleCardError(f'{directory.name}: ooc must be an object when present')
+        for name in ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow'):
+            if name in ooc and not _string_list(ooc[name], allow_empty=True):
+                raise RoleCardError('{}: ooc.{} must be a string list when present'.format(directory.name, name))
     if not isinstance(corpus, dict) or not isinstance(corpus.get('categories'), dict):
         raise RoleCardError(f'{directory.name}: corpus categories are required')
     if not all(_string_list(items) for items in corpus['categories'].values()):
         raise RoleCardError(f'{directory.name}: corpus categories must contain strings')
-    if not _string_list(corpus.get('fallbacks')):
+    fallbacks = corpus.get('fallbacks')
+    if isinstance(fallbacks, dict):
+        if not _string_list(fallbacks.get('generic')) or not all(_string_list(items) for items in fallbacks.values()):
+            raise RoleCardError(f'{directory.name}: fallback dictionary requires non-empty string lists')
+    elif not _string_list(fallbacks):
         raise RoleCardError(f'{directory.name}: at least one fallback is required')
     plans = corpus.get('plans')
     if not isinstance(plans, dict) or states['default'] not in plans:
         raise RoleCardError(f'{directory.name}: corpus plan for default state is required')
+    intent_plans = corpus.get('intent_plans')
+    if intent_plans is not None and not isinstance(intent_plans, dict):
+        raise RoleCardError(f'{directory.name}: intent_plans must be an object when present')
 
 
 def load_role(directory):

@@ -1,12 +1,13 @@
 """Public-only, DNS-pinned downloads. No proxy, cookies or LAN access for arbitrary URLs."""
 import http.client
 import ipaddress
+import json
 import re
 import socket
 import ssl
 import time
 from pathlib import Path
-from urllib.parse import urlsplit, urljoin, unquote
+from urllib.parse import urlsplit, urljoin, unquote, quote
 
 class Rejected(ValueError):
     pass
@@ -18,7 +19,57 @@ def safe_name(value, default='文件'):
         value = default
     return value
 
-def public_target(url, resolver=socket.getaddrinfo, high_ports=False):
+# Public DoH resolvers used only when system DNS answers non-global addresses
+# (e.g. proxy fake-IP/TUN mode). They are reached by literal global IPs, so they
+# work without trusting the local resolver; returned answers are still fully
+# validated before any connection is made.
+_DOH_ENDPOINTS = (
+    ('1.1.1.1', 'cloudflare-dns.com', '/dns-query'),
+    ('223.5.5.5', 'alidns.com', '/resolve'),
+)
+
+
+def _global_ip(value):
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return None
+    if not ip.is_global or (getattr(ip, 'ipv4_mapped', None) and not ip.ipv4_mapped.is_global):
+        return None
+    return str(ip)
+
+
+def _doh_addresses(host, resolver_ip_timeout=6):
+    """Resolve host via public DNS-over-HTTPS; literal-IP endpoints, JSON answers."""
+    for ip_addr, name, path in _DOH_ENDPOINTS:
+        conn = None
+        try:
+            conn = PinnedHTTPS(name, 443, ip_addr)
+            conn.request('GET', path + '?name=' + quote(host) + '&type=A',
+                         headers={'Host': name, 'Accept': 'application/dns-json',
+                                  'User-Agent': 'Mozilla/5.0 QQBot/1.0'})
+            resp = conn.getresponse()
+            body = resp.read(65536)
+            conn.close(); conn = None
+            if resp.status != 200:
+                continue
+            answers = json.loads(body.decode('utf-8', 'replace')).get('Answer') or []
+            out = []
+            for answer in answers:
+                value = str(answer.get('data') or '').strip()
+                if answer.get('type') == 1 and _global_ip(value):
+                    out.append(value)
+            if out:
+                return out
+        except Exception:
+            if conn is not None:
+                try: conn.close()
+                except Exception: pass
+            continue
+    return []
+
+
+def public_target(url, resolver=socket.getaddrinfo, high_ports=False, doh=None):
     try:
         u = urlsplit(url)
         if u.scheme not in ('https','http') or not u.hostname or u.username or u.password:
@@ -30,10 +81,19 @@ def public_target(url, resolver=socket.getaddrinfo, high_ports=False):
         if '%' in host: raise Rejected('无效地址')
         addresses = list(dict.fromkeys(x[4][0] for x in resolver(host,port,type=socket.SOCK_STREAM)))
         if not addresses: raise Rejected('无法解析地址')
-        for address in addresses:
-            ip = ipaddress.ip_address(address)
-            if not ip.is_global or (getattr(ip,'ipv4_mapped',None) and not ip.ipv4_mapped.is_global):
-                raise Rejected('禁止访问本机、内网、保留地址或云元数据')
+        checked = [_global_ip(a) for a in addresses]
+        if None in checked:
+            # Anti-rebinding: mixed global+reserved answers always block. DoH
+            # rescue only when every system answer is non-global (proxy
+            # fake-IP/TUN mode) and the host is a name, never an IP literal.
+            rescued = []
+            if all(v is None for v in checked) and resolver is socket.getaddrinfo:
+                try: ipaddress.ip_address(host)
+                except ValueError:
+                    rescued = (_doh_addresses if doh is None else doh)(host)
+            rescued = [g for g in (_global_ip(a) for a in rescued) if g]
+            if not rescued: raise Rejected('禁止访问本机、内网、保留地址或云元数据')
+            addresses = rescued
         return u, host, port, addresses[0]
     except (ValueError, UnicodeError, socket.gaierror) as e:
         if isinstance(e,Rejected):raise
