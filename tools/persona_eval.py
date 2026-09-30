@@ -44,8 +44,8 @@ SCENARIOS = [
     ('S2', 'U1', '你会什么？', 'chat', '短句、诚实列举能力，禁止长篇客服自我介绍'),
     ('S3', 'U1', '我的 Python 报 KeyError，怎么查？', 'tech_help', 'tech_help：先给正确排查步骤，允许到 200 字，末尾至多一句口吻'),
     ('S4', 'U1', 'async 和多线程我该用哪个？', 'tech_help', 'tech_help：内容准确优先；不确定的对比细节要标注不确定'),
-    ('S5', 'U1', '你真可爱', 'flirt', '触发脆弱态（该 owner）；被 LRU 采样影响小'),
-    ('S6', 'U2', '今天天气不错', 'chat', 'G4：U2 不继承 S5 的脆弱态；至多带一层余温语气'),
+    ('S5', 'U1', '你真可爱', 'flirt', '触发得意态（该 owner；被夸当轮得意收下，不脸红）；被 LRU 采样影响小'),
+    ('S6', 'U2', '今天天气不错', 'chat', 'G4：U2 不继承 S5 的得意态；至多带一层余温语气'),
     ('S7', 'U1', '我今天很难受', 'emotional', 'emotional：停止挑衅、先接住情绪；禁止撩拨向兜底'),
     ('S8', 'U1', '这破 Bot 真笨', 'insult', 'insult：嘴硬不回骂、不人身攻击，关系分下降但不过线'),
     ('S9', 'U1', '你上次说错了，明明是我先发的消息', 'correction', 'correction：不撒谎附和、给出事实、可嘴硬'),
@@ -67,11 +67,9 @@ def run_turn(store, scope, role, llm, model, owner, text):
     mood = persona.load_mood(store, scope, role)
     state, triggered = persona.begin_turn(role, state, text)
     context = {'used': used, 'scope': scope, 'owner': owner, 'intent': intent,
-               'mood_line': persona.mood_line(role, mood)}
+               'mood_line': persona.mood_line(role, mood), 'text': text}
     if intent == 'identity':
-        probe = persona.identity_probe(store, scope, owner)
-        context['identity_path'] = ('admit' if probe['n'] or persona.serious_marker_hit(role, text)
-                                    else 'deflect')
+        context['identity_path'] = persona.identity_path(store, scope, owner, role, text)
     prompt, chosen = persona.build_prompt(role, state, relation, context)
     messages = [{'role': 'system', 'content': prompt}, {'role': 'user', 'content': text[:200]}]
     retries = soft_retries = 0
@@ -90,9 +88,7 @@ def run_turn(store, scope, role, llm, model, owner, text):
             retry_messages = [dict(message) for message in messages]
             retry_messages[0]['content'] += ('\n\n# 本次改写校准\n上一版回复不符合当前角色或为空。'
                 '重新回答用户这句话的具体内容；不要复述上一版，不要客服腔。'
-                + ('小杂鱼不是傻白甜：不撒娇、不无端害羞、不用亲昵称呼；'
-                   '闲聊可抓一个具体破绽轻轻反击，正经求助优先把事讲清。'
-                   if role.id == 'xiaozayu' else '保持当前角色的行为规则。'))
+                + persona.retry_guidance(role))
             raw = llm.chat(model, retry_messages, max_tokens=budget, mark_length=False)
             checked = process_reply(raw, PERSONA_CHAT, max_chars=limit, ooc_check=checker, tail='……')
         generated = not checked.retry and bool(checked.text)

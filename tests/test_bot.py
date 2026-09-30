@@ -32,7 +32,7 @@ class Fixture(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name);self.cfg=copy.deepcopy(CFG)
         self.bot=Bot(self.root,lambda:self.cfg);self.bot.ob=Mock();self.bot.llm=Mock();self.bot.llm.models.return_value=['test-model','other-model']
-        self.bot.llm.chat.return_value='测试回答';self.dir=self.root/'work'/'test';self.dir.mkdir()
+        self.bot.llm.chat.return_value='测试回答';self.dir=self.root/'work'/'test';self.dir.mkdir();self.bot.typing_pause=lambda seconds:None
     def tearDown(self):
         self.bot.store.db.close();self.temp.cleanup()
     def e(self,**kwargs):return normalize(event(**kwargs))
@@ -107,7 +107,7 @@ class KeywordsAndCapabilities(Fixture):
     def test_keyword_fallback_on_model_error(self):
         self.bot.llm.chat.side_effect=Rejected('模型网关请求失败，HTTP 503')
         result=self.bot.process(self.e(text='色色'),'jobkw2')
-        self.assertEqual(result[0]['text'],'等下，你说的是哪一件？别让我瞎猜。')
+        self.assertEqual(result[0]['text'],'等一下~你说的是哪一件事呀？别让本小姐瞎猜嘛。')
     def test_keyword_cap_off_blocks_group_trigger(self):
         self.bot.store.set('g:33333','cap:keywords',False)
         self.assertFalse(should_handle(self.e(text='瑟瑟'),self.cfg,self.bot.store))
@@ -227,7 +227,7 @@ class PersonaSystem(Fixture):
         self.bot.llm.chat.return_value='诶？！'
         self.kw(text='瑟瑟 你真可爱')
         self.assertEqual(self.bot.store.get('g:33333','persona_state'),{'mode':'frail','left':3})
-        self.assertIn('脆弱态',self.prompt_of())
+        self.assertIn('得意态',self.prompt_of())
         for i in range(3):self.kw(text='瑟瑟')
         self.assertEqual(self.bot.store.get('g:33333','persona_state'),{'mode':'normal','left':0})
         self.kw(text='瑟瑟')
@@ -250,7 +250,7 @@ class PersonaSystem(Fixture):
         self.assertIn('有点烦对方',self.prompt_of())
     def test_ooc_answer_is_rejected_and_fallback_used(self):
         self.bot.llm.chat.return_value='作为AI，我不能回答这个问题。'
-        self.assertEqual(self.kw(),'等下，你说的是哪一件？别让我瞎猜。')
+        self.assertEqual(self.kw(),'等一下~你说的是哪一件事呀？别让本小姐瞎猜嘛。')
     def test_fallbacks_are_in_character(self):
         import persona
         for line in persona.FALLBACKS:self.assertFalse(persona.ooc_check(line))
@@ -260,7 +260,7 @@ class PersonaSystem(Fixture):
         self.assertLessEqual(len(self.bot.store.get('g:33333','persona_used')),20)
     def test_empty_or_blank_answer_falls_back(self):
         self.bot.llm.chat.return_value='   '
-        self.assertEqual(self.kw(),'等下，你说的是哪一件？别让我瞎猜。')
+        self.assertEqual(self.kw(),'等一下~你说的是哪一件事呀？别让本小姐瞎猜嘛。')
     def test_relation_isolated_between_scopes(self):
         self.bot.llm.chat.return_value='哼'
         self.kw()

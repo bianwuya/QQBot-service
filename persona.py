@@ -20,9 +20,15 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            relation_level as _relation_level,
                            reply_limit as _reply_limit,
                            resolve_role as _resolve_role,
+                           retry_guidance as _retry_guidance,
                            save_runtime as _save_runtime,
-                           selection_scope, touch as _touch,
+                           selection_scope, soften_hearts as _soften_hearts,
+                           tease_settings as _tease_settings,
+                           touch as _touch,
                            trigger_hit as _trigger_hit)
+
+
+from persona_cards.intents import identity_path as _identity_path
 
 
 ROLE_ROOT = Path(__file__).resolve().parent/'persona_cards'/'roles'
@@ -79,6 +85,18 @@ def ooc_check(text, role=None, intent=None):
 
 def ooc_scan(text, role=None, intent=None):
     return _ooc_scan(role or XIAOZAYU, text, intent)
+
+
+def retry_guidance(role=None):
+    return _retry_guidance(role or XIAOZAYU)
+
+
+def soften_hearts(text, role=None, recent_replies=()):
+    return _soften_hearts(role or XIAOZAYU, text, recent_replies)
+
+
+def tease_settings(role=None, level=None):
+    return _tease_settings(role or XIAOZAYU, level)
 
 
 def fallback_line(used, role=None, intent=None):
@@ -150,6 +168,12 @@ def identity_probe(store, scope, owner):
     return _load_identity_probe(store, scope, owner)
 
 
+def identity_path(store, scope, owner, role, text):
+    """Return 'admit' or 'deflect' for an identity question (see persona_cards.intents)."""
+    probe = _load_identity_probe(store, scope, owner)
+    count = probe.get('n', 0) if isinstance(probe, dict) else 0
+    return _identity_path(role, count, text)
+
+
 def note_identity_probe(store, scope, owner):
     return _note_identity_probe(store, scope, owner)
-

@@ -41,7 +41,11 @@ def limit_for(role, intent=None):
 def output_instruction(role, intent=None):
     limit = limit_for(role, intent)
     base = str(role.reply_limits['instruction']).rstrip('。')
-    if limit <= 80:
+    leads = role.reply_limits.get('lead')
+    template = leads.get('short' if limit <= 80 else 'long') if isinstance(leads, dict) else None
+    if isinstance(template, str) and template.count('{}') == 1:
+        lead = template.format(limit)
+    elif limit <= 80:
         lead = '日常一两句、约30字内；解释技术或安抚情绪最多{}字，先答对再带口吻。'.format(limit)
     else:
         lead = '先答对再带口吻；当前情境最多{}字，复杂问题可分点说明。'.format(limit)
@@ -64,7 +68,7 @@ def behavior_block(role, intent=None):
     return current + ('\n其他情境索引：' + '；'.join(index) if index else '')
 
 
-_OOC_KEYS = ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow')
+_OOC_KEYS = ('hard', 'service_tone', 'sweet_tone', 'care_tone', 'soft', 'soft_allow')
 
 
 def _ooc_config(role):
@@ -113,6 +117,11 @@ def ooc_scan(role, text, intent=None):
         sweet = _regex_hit(config['sweet_tone'], text)
         if sweet:
             return {'retry': True, 'soft': False, 'kind': 'sweet_tone', 'matched': sweet}
+    # Decorative hearts are allowed in teasing, never in comfort or in answers to affection.
+    if intent in ('emotional', 'flirt'):
+        care = _regex_hit(config['care_tone'], text)
+        if care:
+            return {'retry': True, 'soft': False, 'kind': 'care_tone', 'matched': care}
     soft = next((word for word in config['soft'] if word and word in text), None)
     if soft and not _regex_hit(config['soft_allow'], text):
         return {'retry': False, 'soft': True, 'kind': 'soft', 'matched': soft}
@@ -121,6 +130,85 @@ def ooc_scan(role, text, intent=None):
 
 def ooc_check(role, text, intent=None):
     return bool(ooc_scan(role, text, intent)['retry'])
+
+
+_HEARTS = '♡♥❤'
+
+
+def soften_hearts(role, text, recent_replies=()):
+    """Heart cooldown: drop decorative hearts when a recent reply in the group already used one."""
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    style = data.get('style') if isinstance(data.get('style'), dict) else {}
+    cooldown = style.get('heart_cooldown')
+    if not isinstance(cooldown, int) or cooldown < 1 or not isinstance(text, str):
+        return text
+    if not any(ch in text for ch in _HEARTS):
+        return text
+    recent = [item for item in (recent_replies or ()) if isinstance(item, str)][-cooldown:]
+    if not any(ch in item for item in recent for ch in _HEARTS):
+        return text
+    cleaned = re.sub('[' + _HEARTS + '\\ufe0f]+', '', text)
+    cleaned = re.sub(r'[ \t]+(?=[~～，。！？!?])', '', cleaned)
+    cleaned = re.sub(r' {2,}', ' ', cleaned).strip()
+    return cleaned or text
+
+
+def retry_guidance(role):
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    custom = data.get('retry_guidance')
+    return custom.strip() if isinstance(custom, str) and custom.strip() else '保持当前角色的行为规则。'
+
+
+def _opener(text):
+    text = re.sub(r'^[\s"“”「」()（）]+', '', str(text or ''))
+    match = re.match(r'[^，,。！？!?~～…—\s]{1,3}[？?！!~～]?', text)
+    return match.group(0) if match else ''
+
+
+def style_fatigue_notes(role, recent_replies=(), intent=None):
+    """Prompt nudges against monotony: habits over-used in the last few replies and a repeated opening."""
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    style = data.get('style') if isinstance(data.get('style'), dict) else {}
+    cfg = style.get('fatigue')
+    if not isinstance(cfg, dict):
+        return []
+    recent_all = [item for item in (recent_replies or ()) if isinstance(item, str)]
+
+    def positive(value, default):
+        return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+
+    notes = []
+    for item in cfg.get('items', []) if isinstance(cfg.get('items'), list) else []:
+        if not isinstance(item, dict) or not all(isinstance(item.get(k), str) for k in ('regex', 'label', 'avoid')):
+            continue
+        window, hits = positive(item.get('window'), 3), positive(item.get('hits'), 1)
+        try:
+            used = sum(1 for text in recent_all[-window:] if re.search(item['regex'], text))
+        except re.error:
+            continue
+        if used >= hits:
+            notes.append('最近几条回复已经用过{}，{}'.format(item['label'], item['avoid']))
+    for item in cfg.get('suggest', []) if isinstance(cfg.get('suggest'), list) else []:
+        if not isinstance(item, dict) or not all(isinstance(item.get(k), str) for k in ('regex', 'label', 'text')):
+            continue
+        if isinstance(item.get('intents'), list) and intent not in item['intents']:
+            continue
+        try:
+            used = any(re.search(item['regex'], text) for text in recent_all[-positive(item.get('window'), 4):])
+        except re.error:
+            continue
+        if not used:
+            notes.append('最近几条回复没用过{}，{}'.format(item['label'], item['text']))
+    opener_cfg = cfg.get('opener')
+    if isinstance(opener_cfg, dict):
+        window, hits = positive(opener_cfg.get('window'), 3), positive(opener_cfg.get('hits'), 2)
+        recent = recent_all[-window:]
+        openers = [_opener(text) for text in recent]
+        if len(recent) >= hits:
+            for opener in dict.fromkeys(openers):
+                if opener and openers.count(opener) >= hits:
+                    notes.append('最近几条都以“{}”开头，这条换个开头。'.format(opener))
+    return notes
 
 
 def ooc_prompt_words(role):
@@ -140,20 +228,96 @@ def fallback_line(role, used, intent=None):
     return next((line for line in pool if line not in used), pool[0])
 
 
-def _pick(role, category, used, count, variation=0):
+_LEVEL_ORDER = ('mild', 'standard', 'spicy')
+
+
+def _strength_rank(role, text):
+    provenance = role.corpus.get('provenance') if isinstance(role.corpus, dict) else None
+    lines = provenance.get('lines') if isinstance(provenance, dict) else None
+    info = lines.get(text) if isinstance(lines, dict) else None
+    value = info.get('strength') if isinstance(info, dict) else None
+    return _LEVEL_ORDER.index(value) if value in _LEVEL_ORDER else 0
+
+
+def tease_settings(role, level=None):
+    """Return (key, label, rule) of the tease level; (None, '', '') for roles without the setting."""
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    tease = data.get('tease')
+    levels = tease.get('levels') if isinstance(tease, dict) else None
+    if not isinstance(levels, dict) or not levels:
+        return None, '', ''
+    key = level if level in levels else tease.get('default')
+    if key not in levels:
+        key = next(iter(levels))
+    item = levels[key] if isinstance(levels[key], dict) else {}
+    return key, str(item.get('label', key)), str(item.get('rule', ''))
+
+
+def _rotate(items, shift):
+    if not items:
+        return items
+    shift %= len(items)
+    return items[shift:] + items[:shift]
+
+
+def _pick(role, category, used, count, variation=0, level=None):
     source = role.corpus['categories'].get(category, [])
     pool = [line for line in source if line not in used] or source
-    if pool and isinstance(variation, int):
-        shift = variation % len(pool)
-        pool = pool[shift:] + pool[:shift]
-    return pool[:count]
+    shift = variation if isinstance(variation, int) else 0
+    if level in _LEVEL_ORDER:
+        # Prefer lines at or below the tease level, then fill up from the stronger ones.
+        cap = _LEVEL_ORDER.index(level)
+        allowed = [line for line in pool if _strength_rank(role, line) <= cap]
+        rest = [line for line in pool if line not in allowed]
+        return (_rotate(allowed, shift) + _rotate(rest, shift))[:count]
+    return _rotate(pool, shift)[:count]
 
 
 _TASK_INTENTS = frozenset(('tech_help', 'emotional', 'identity', 'memory',
                            'correction', 'boundary', 'unclear'))
 
 
-def examples_for(role, mode, used, intent=None, identity_path=None, variation=0):
+def scenario_categories(role, intent, text):
+    """Return corpus categories whose scenario rule matches this chat message.
+
+    Rules live in corpus.json under scenario_rules; task intents never use them,
+    so help, comfort, identity and memory prompts keep their fixed exemplars.
+    """
+    corpus = role.corpus if isinstance(role.corpus, dict) else {}
+    config = corpus.get('scenario_rules')
+    if not isinstance(config, dict) or intent in _TASK_INTENTS:
+        return []
+    text = text if isinstance(text, str) else ''
+    if not text.strip():
+        return []
+    allowed = config.get('intents')
+    if isinstance(allowed, list) and intent not in allowed:
+        return []
+    limit = config.get('max_hits', 2)
+    limit = limit if isinstance(limit, int) and limit > 0 else 2
+    categories = corpus.get('categories', {})
+    hits = []
+    for rule in config.get('rules') or []:
+        if not isinstance(rule, dict):
+            continue
+        category = rule.get('category')
+        if not isinstance(category, str) or category in hits or not categories.get(category):
+            continue
+        patterns = rule.get('patterns')
+        patterns = [item for item in patterns if isinstance(item, str) and item] if isinstance(patterns, list) else []
+        rule_intents = rule.get('intents')
+        if isinstance(rule_intents, list):
+            matched = intent in rule_intents and (not patterns or _regex_hit(patterns, text))
+        else:
+            matched = bool(patterns) and _regex_hit(patterns, text)
+        if matched:
+            hits.append(category)
+            if len(hits) >= limit:
+                break
+    return hits
+
+
+def examples_for(role, mode, used, intent=None, identity_path=None, variation=0, tease_level=None, text=None):
     # Identity probes rely on stable deflect/admit exemplars; keep those fixed.
     if intent == 'identity':
         variation = 0
@@ -177,11 +341,27 @@ def examples_for(role, mode, used, intent=None, identity_path=None, variation=0)
         category = 'identity_deflect' if identity_path == 'deflect' else 'honest_admit'
         intent_plan = [[category, 2]]
     chosen = []
+    # A matching chat scenario (morning greeting, lost gacha pull, thanks...)
+    # contributes one exemplar each and takes the place of generic ones, so the
+    # prompt keeps the same number of examples.
+    scenario = scenario_categories(role, intent, text)
+    cap = None
+    if scenario:
+        budget = sum(max(0, int(entry[1])) for entry in list(plan) + list(intent_plan or [])
+                     if isinstance(entry, list) and len(entry) == 2)
+        for category in scenario:
+            chosen += _pick(role, category, used+chosen, 1, variation+len(chosen) if isinstance(variation,int) else 0, tease_level)
+        cap = max(budget, len(chosen))
     for entry in list(plan) + list(intent_plan or []):
         if not isinstance(entry, list) or len(entry) != 2:
             continue
         category, count = entry
-        chosen += _pick(role, category, used+chosen, max(0, int(count)), variation+len(chosen) if isinstance(variation,int) else 0)
+        count = max(0, int(count))
+        if cap is not None:
+            count = min(count, cap-len(chosen))
+            if count <= 0:
+                continue
+        chosen += _pick(role, category, used+chosen, count, variation+len(chosen) if isinstance(variation,int) else 0, tease_level)
     state = role.states.get('modes', {}).get(mode) or role.states['modes'][role.states['default']]
     return state['label'], '\n'.join('· '+line for line in chosen), chosen
 
@@ -221,15 +401,21 @@ def build_prompt(role, state, relation, context):
     mode = state.get('mode', role.states['default']) if isinstance(state, dict) else role.states['default']
     if mode not in role.states['modes']:
         mode = role.states['default']
+    tease_key, _tease_label, tease_rule = tease_settings(role, context.get('tease_level'))
     state_label, corpus_block, chosen = examples_for(
-        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0))
+        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0), tease_key,
+        context.get('text'))
     if (role.id == 'xiaozayu' and mode == role.states.get('trigger_mode')
             and context.get('intent') != 'flirt'):
-        state_label = ('刚才失过半拍，现在已收拾好场面：不要再结巴、脸红或撒娇；'
+        recovered = role.states.get('recovered_label')
+        state_label = (recovered if isinstance(recovered, str) and recovered.strip() else
+                       '刚才失过半拍，现在已收拾好场面：不要再结巴、脸红或撒娇；'
                        '先回应眼前的问题，轻松话题可嘴硬一句。')
     mood_line = str(context.get('mood_line', '')).strip()
     if mood_line:
         state_label += '\n'+mood_line
+    for note in style_fatigue_notes(role, context.get('recent_replies'), context.get('intent')):
+        state_label += '\n'+note
     count = relation.get('n', 0)
     memory = '互动次数：{}｜亲密度：{}｜最后见面：{}'.format(
         count, relation_level(role, relation.get('a', 0)),
@@ -250,6 +436,7 @@ def build_prompt(role, state, relation, context):
         'behavior_block': behavior_block(role, context.get('intent')),
         'memory_behavior': role.data['memory_behavior'],
         'output_instruction': output_instruction(role, context.get('intent')),
+        'tease_rule': tease_rule,
     }
     try:
         prompt = role.prompt.format(**values)

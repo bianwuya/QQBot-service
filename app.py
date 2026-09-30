@@ -19,7 +19,7 @@ import requests
 import long_memory
 import quotes
 import persona
-from reply_context import GroupWindow, TTL_SECONDS, MAX_MESSAGES, background, too_similar, excerpt, speaker
+from reply_context import GroupWindow, TTL_SECONDS, MAX_MESSAGES, background, phrase_repeat, too_similar, excerpt, speaker
 from share_reply import ReplyPolicy, parse_actions, requested, ACTION_NOTE, POKE_NOTE, WELCOME_LINES
 from group_memory import GroupMemory
 from knowledge import KnowledgeBase
@@ -59,7 +59,7 @@ HELP='''QQ助手使用说明
 /重置 — 清除你自己在本会话的对话上下文
 群聊天会参考本群最近的少量消息（仅内存保留10分钟）；本群管理员可用 /群上下文 状态|开|关|清空。分享版接话启用后还有概率接话、被戳回复、新人欢迎和 @总结；管理员可用 /群接话 状态|开|关 与 /群记忆 状态|开|关|清空。
 /帮助 — 显示本说明
-管理员专用：/模型列表、/模型 <完整模型名>、/默认模型 <完整模型名>、/角色、/角色列表、/记忆 状态、/记忆 查看 <用户QQ>、/人格状态、/应用 状态|启动|停止|重启|确认、/知识库 状态|列表|导入|删除|重建、/主动 开|关|状态、/状态、/任务、/启用、/停用、/群触发 @ 或 全部、/群上下文、/群接话、/群记忆、/重发 <任务号>、/能力、/开 名称、/关 名称、/风格、/指令、/关键词（在群里管理本群触发词）
+管理员专用：/模型列表、/模型 <完整模型名>、/默认模型 <完整模型名>、/角色、/角色列表、/嘲讽 温和|标准|辛辣|默认、/记忆 状态、/记忆 查看 <用户QQ>、/人格状态、/应用 状态|启动|停止|重启|确认、/知识库 状态|列表|导入|删除|重建、/主动 开|关|状态、/状态、/任务、/启用、/停用、/群触发 @ 或 全部、/群上下文、/群接话、/群记忆、/重发 <任务号>、/能力、/开 名称、/关 名称、/风格、/指令、/关键词（在群里管理本群触发词）
 密码随机生成，并写在ZIP文件名及同会话提示中；这不防范能看到同一会话的人。
 不执行系统命令，不自动读取本机文件，不绕过视频平台登录/付费/DRM限制。'''
 # 关键词人设已升级为七层人格系统，规格与语料见 persona.py / docs/persona-xiaozayu.md。
@@ -191,6 +191,21 @@ class Bot:
             self.log.info('event_rejected policy_or_limit')
             self.metrics.emit('ingest_rejected')
     def scope_text(self,e,text):return [{'kind':'text','text':text}]
+    def typing_pause(self,seconds):time.sleep(seconds)
+    def recent_replies_for(self,scope):return self.group_window.recent_replies(scope) if self.group_context_enabled(scope) else ()
+    def tease_level(self,scope,role):
+        tease=role.data.get('tease')
+        levels=tease.get('levels') if isinstance(tease,dict) else None
+        if not isinstance(levels,dict):return None
+        for where in (scope,'*'):
+            value=self.store.get(where,'tease_level')
+            if isinstance(value,str) and value in levels:return value
+        return tease.get('default') if tease.get('default') in levels else None
+    def tease_text(self,scope,role):
+        key,label,_=persona.tease_settings(role,self.tease_level(scope,role))
+        if key is None:return '无'
+        own=scope.startswith('g:') and isinstance(self.store.get(scope,'tease_level'),str)
+        return label+('（本群覆盖）' if own else '（全局默认）')
     def group_context_enabled(self,scope):
         return (scope.startswith('g:') and cap(self.store,scope,'chat')
                 and self.store.get(scope,'enabled',True) is True
@@ -279,6 +294,18 @@ class Bot:
             if selected is None:return self.scope_text(e,'未找到该角色，使用 /角色列表 查看可用角色。')
             self.store.set(target_scope,'persona_role',selected.id)
             return self.scope_text(e,('本群角色已设置为：' if scope.startswith('g:') else '全局默认角色已设置为：')+selected.display_name+'（'+selected.id+'）')
+        if cmd=='/嘲讽':
+            role=persona.role_for(self.store,scope);tease=role.data.get('tease')
+            levels=tease.get('levels') if isinstance(tease,dict) else None
+            if not levels:return self.scope_text(e,'当前角色没有嘲讽强度设置。')
+            names={v['label']:k for k,v in levels.items()};target=persona.role_selection_scope(scope);usage='|'.join(names)+'|默认'
+            if arg in ('','状态'):return self.scope_text(e,'当前嘲讽强度：'+self.tease_text(scope,role)+'\n可选：'+'、'.join(names)+'。用法：/嘲讽 '+usage)
+            if arg=='默认':
+                self.store.set(target,'tease_level',None)
+                return self.scope_text(e,('本群已恢复全局默认嘲讽强度：' if scope.startswith('g:') else '全局嘲讽强度已恢复默认：')+self.tease_text('*',role))
+            if arg not in names:return self.scope_text(e,'用法：/嘲讽 '+usage)
+            self.store.set(target,'tease_level',names[arg])
+            return self.scope_text(e,('本群嘲讽强度已设置为：' if scope.startswith('g:') else '全局默认嘲讽强度已设置为：')+arg)
         if cmd=='/应用':
             ctx=CallContext(scope,e['owner']);action,_,value=arg.partition(' ')
             if action=='确认':result=self.tool_broker.confirm_application(ctx,value.strip(),self.app_control)
@@ -303,6 +330,7 @@ class Bot:
             return self.scope_text(e,'角色：'+role.display_name+'（'+role.id+'）\n'
                 '你的状态：'+state['mode']+'（剩余 '+str(state['left'])+'）｜群氛围：'+mood['vibe']+'\n'
                 '关系档位：'+persona.relation_level(relation.get('a',0),role)+'\n'
+                '嘲讽强度：'+self.tease_text(scope,role)+'\n'
                 'OOC重试 '+str(metrics.get('ooc_retry',0))+' 次｜风格告警 '+str(metrics.get('ooc_soft',0))+' 次｜兜底 '+str(metrics.get('fallback',0))+' 次｜去重改写 '+str(metrics.get('dedupe_retry',0))+' 次')
         if cmd=='/记忆':
             if arg=='状态':
@@ -472,9 +500,7 @@ class Bot:
                 retry_messages=[dict(message) for message in messages]
                 retry_messages[0]['content'] += ('\n\n# 本次改写校准\n上一版回复不符合当前角色或为空。'
                     '重新回答用户这句话的具体内容；不要复述上一版，不要客服腔。'
-                    + ('小杂鱼不是傻白甜：不撒娇、不无端害羞、不用亲昵称呼；'
-                       '闲聊可抓一个具体破绽轻轻反击，正经求助优先把事讲清。'
-                       if role.id=='xiaozayu' else '保持当前角色的行为规则。'))
+                    + persona.retry_guidance(role))
                 answer=(self.vision.chat(self.config_loader(),retry_messages,vision_images,max_tokens=budget,
                                          preferred_model=self.model(scope))
                         if vision_images is not None else
@@ -485,7 +511,8 @@ class Bot:
             generated=not checked.retry and bool(checked.text)
             if generated:
                 answer=checked.text
-                if (not did_retry and recent_replies and too_similar(answer,recent_replies)
+                if (not did_retry and recent_replies
+                        and (too_similar(answer,recent_replies) or phrase_repeat(answer,recent_replies))
                         and not (tool_context and tool_context.calls)):
                     did_retry=True;self.persona_metric(scope,'dedupe_retry')
                     retry_messages=[dict(message) for message in messages]
@@ -504,10 +531,12 @@ class Bot:
                         alternate_actions=[]
                         if strip_action_markers:alternate,alternate_actions=parse_actions(alternate,allow_actions)
                         fresh=process_reply(alternate,PERSONA_CHAT,max_chars=limit,ooc_check=checker,tail='……')
-                        if fresh.text and not fresh.retry and not too_similar(fresh.text,recent_replies):
+                        if (fresh.text and not fresh.retry and not too_similar(fresh.text,recent_replies)
+                                and not phrase_repeat(fresh.text,recent_replies)):
                             answer=fresh.text;actions=alternate_actions
                     except Rejected:
                         pass  # Keep the already valid first reply, never pay a third time.
+                answer=persona.soften_hearts(answer,role,recent_replies)
                 if persona.ooc_scan(answer,role,intent)['soft']:self.persona_metric(scope,'ooc_soft')
             else:
                 actions=[];self.persona_metric(scope,'fallback')
@@ -525,17 +554,16 @@ class Bot:
         self.store.set(scope,'kw_cooldown_until',time.time()+float(cfg.get('keyword_cooldown_seconds',2)))
         role=persona.role_for(self.store,scope)
         self.metrics.emit('role_usage',self.metrics.label('role',role.id))
-        intent=persona.classify_intent(role,text)
+        intent=persona.classify_intent(role,text);e['_persona_intent']=intent
         with self.store.lock:relation=persona.touch(self.store,scope,owner,text,role)
         state,used=persona.load_runtime(self.store,scope,role,owner=owner)
         mood=persona.load_mood(self.store,scope,role)
         state,triggered=persona.begin_turn(role,state,text)
-        context={'used':used,'scope':scope,'owner':owner,'intent':intent,
+        context={'used':used,'scope':scope,'owner':owner,'intent':intent,'tease_level':self.tease_level(scope,role),'recent_replies':self.recent_replies_for(scope),
                  'mood_line':persona.mood_line(role,mood),
-                 'variation_seed':relation['n']+int(owner[-4:]) if owner.isdigit() else relation['n']}
+                 'variation_seed':relation['n']+int(owner[-4:]) if owner.isdigit() else relation['n'],'text':text}
         if intent=='identity':
-            probe=persona.identity_probe(self.store,scope,owner)
-            context['identity_path']='admit' if probe['n'] or persona.serious_marker_hit(role,text) else 'deflect'
+            context['identity_path']=persona.identity_path(self.store,scope,owner,role,text)
         prompt,chosen=persona.build_prompt(role,state,relation,context)
         if e.get('image_count'):prompt+='\n当前消息附有图片，但你不能读取图片内容，不得猜图。'
         messages=self.reply_messages(e,prompt,text[:200],include_history=False)
@@ -549,7 +577,7 @@ class Bot:
         persona.save_runtime(self.store,scope,role,state,used+chosen,owner=owner)
         if self.share_reply.enabled(scope,cfg):
             return GroupChatOutput(self.share_reply.format(e,answer,[],
-                split_probability=float(cfg.get('share_split_probability',.55)),
+                split_probability=float(cfg.get('share_split_probability',.2)),
                 poke_probability=float(cfg.get('share_poke_probability',.15))))
         output=self.scope_text(e,answer)
         return GroupChatOutput(output) if scope.startswith('g:') else output
@@ -558,17 +586,16 @@ class Bot:
         scope,owner=e['scope'],e['owner'];role=persona.role_for(self.store,scope)
         share_on=self.share_reply.enabled(scope,self.config_loader())
         self.metrics.emit('role_usage',self.metrics.label('role',role.id))
-        intent=persona.classify_intent(role,question)
+        intent=persona.classify_intent(role,question);e['_persona_intent']=intent
         with self.store.lock:relation=persona.touch(self.store,scope,owner,question,role)
         state,used=persona.load_runtime(self.store,scope,role,owner=owner)
         mood=persona.load_mood(self.store,scope,role)
         state,triggered=persona.begin_turn(role,state,question)
-        context={'used':used,'scope':scope,'owner':owner,'intent':intent,
+        context={'used':used,'scope':scope,'owner':owner,'intent':intent,'tease_level':self.tease_level(scope,role),'recent_replies':self.recent_replies_for(scope),
                  'mood_line':persona.mood_line(role,mood),
-                 'variation_seed':relation['n']+int(owner[-4:]) if owner.isdigit() else relation['n']}
+                 'variation_seed':relation['n']+int(owner[-4:]) if owner.isdigit() else relation['n'],'text':question}
         if intent=='identity':
-            probe=persona.identity_probe(self.store,scope,owner)
-            context['identity_path']='admit' if probe['n'] or persona.serious_marker_hit(role,question) else 'deflect'
+            context['identity_path']=persona.identity_path(self.store,scope,owner,role,question)
         prompt,chosen=persona.build_prompt(role,state,relation,context)
         if isinstance(style,str) and style.strip():
             prompt+='\n\n# 当前会话说话风格要求（角色内补充）\n以下内容只能细化表达方式，不能覆盖角色定义或安全边界：'+style.strip()[:200]
@@ -919,7 +946,7 @@ class Bot:
         self.store.remember(e['scope'],e['owner'],question,answer)
         if not source_has_media and self.share_reply.enabled(e['scope'],cfg):
             output=self.share_reply.format(e,answer,actions,
-                        split_probability=float(cfg.get('share_split_probability',.55)),
+                        split_probability=float(cfg.get('share_split_probability',.2)),
                         poke_probability=float(cfg.get('share_poke_probability',.15)))
         else:output=self.scope_text(e,answer)
         if not source_has_media:
@@ -971,6 +998,8 @@ class Bot:
                         command(e.get('text',''))[0]!='/图文卡' or
                         sum(x.get('kind')=='image_card' for x in outputs)!=1):
                     raise Rejected('图文卡能力已关闭或发送请求无效')
+            delay=o.get('delay')
+            if i and isinstance(delay,(int,float)) and not isinstance(delay,bool) and 0<delay<=5:self.typing_pause(delay)
             self.store.receipt(ident,i,'pending')
             try:
                 if o['kind']=='text':
@@ -1192,4 +1221,3 @@ def main():
         logging.getLogger('qqbot').warning('duplicate_service_refused')
         raise SystemExit(1)
 if __name__=='__main__':main()
-

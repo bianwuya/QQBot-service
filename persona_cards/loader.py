@@ -146,9 +146,16 @@ def _validate(card, corpus, directory):
     if ooc is not None:
         if not isinstance(ooc, dict):
             raise RoleCardError(f'{directory.name}: ooc must be an object when present')
-        for name in ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow'):
+        for name in ('hard', 'service_tone', 'sweet_tone', 'care_tone', 'soft', 'soft_allow'):
             if name in ooc and not _string_list(ooc[name], allow_empty=True):
                 raise RoleCardError('{}: ooc.{} must be a string list when present'.format(directory.name, name))
+    tease = card.get('tease')
+    if tease is not None:
+        levels = tease.get('levels') if isinstance(tease, dict) else None
+        if (not isinstance(levels, dict) or not levels or tease.get('default') not in levels
+                or not all(isinstance(v, dict) and isinstance(v.get('label'), str) and isinstance(v.get('rule'), str)
+                           for v in levels.values())):
+            raise RoleCardError(f'{directory.name}: tease needs levels with label/rule and a valid default')
     if not isinstance(corpus, dict) or not isinstance(corpus.get('categories'), dict):
         raise RoleCardError(f'{directory.name}: corpus categories are required')
     if not all(_string_list(items) for items in corpus['categories'].values()):

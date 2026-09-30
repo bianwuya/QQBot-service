@@ -73,3 +73,7 @@
 - OOC 结构化：`ooc.hard` 与 `ooc.service_tone`（正则）命中 → 保持原流程：重试一次再兜底；`ooc.soft` 命中且未被 `ooc.soft_allow` 豁免 → 只记风格告警计数，不重试不兜底；`honest_admit` 语料显式通过 OOC，与词表互斥由测试断言。
 - 情境行为：`behaviors` 当前意图完整规则 + 其余意图一句话索引进 prompt；缺字段旧卡降级为原 `social_behavior` 段。
 - 运维：`/人格状态`（仅管理员）显示角色、本人状态名、群氛围、关系档位与 OOC 重试/风格告警/兜底计数，只含状态名与计数；`tools/persona_eval.py` 离线重放 14 固定场景写入 `state/persona-eval/<时间戳>/report.md`，不经 `app.py`、不写生产库、不发 QQ。
+
+## 2026-09-30 声线重构（雌小鬼向，全年龄）
+
+详见 `docs/mcp-persona-mesugaki-rework-20260930.md`。要点：语料改为带出处（`corpus.json` 的 `provenance`）的公开网络创作；拖腔、语气词、♡ 只装饰嘲讽，讨好型撒娇与客服/长辈/辩论腔仍由 OOC 拦截；♡ 在群内有“最近 3 条回复”的冷却；被夸改为得意收下、示爱不接；内部状态名 `frail` 保留。本节覆盖上文中关于“禁止 ~/♡/颜文字”“被夸脸红三拍”“先答对再带口吻”的描述。

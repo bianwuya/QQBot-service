@@ -65,6 +65,21 @@ def too_similar(text, recent):
     return False
 
 
+def phrase_repeat(text, recent, min_len=5, min_hits=2):
+    """True when the reply reuses a stock phrase (>= min_len chars) that >= min_hits recent replies already contain."""
+    def compact(value):
+        return re.sub(r'[^\w\u4e00-\u9fff]', '', str(value or '')[:300]).casefold()
+    current = compact(text)
+    if len(current) < min_len:
+        return False
+    previous = [compact(item) for item in list(recent)[-MAX_REPLIES:]]
+    previous = [item for item in previous if len(item) >= min_len]
+    if len(previous) < min_hits:
+        return False
+    grams = {current[i:i + min_len] for i in range(len(current) - min_len + 1)}
+    return sum(1 for item in previous if any(gram in item for gram in grams)) >= min_hits
+
+
 class GroupWindow:
     def __init__(self, clock=time.monotonic):
         self.clock = clock

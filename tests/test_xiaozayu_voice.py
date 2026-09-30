@@ -37,7 +37,7 @@ class XiaozayuVoiceRules(unittest.TestCase):
         self.assertFalse(set(CATS['frail']).intersection(chosen))
         prompt, _ = persona.build_prompt(ROLE, {'mode': 'frail', 'left': 2},
                                          {'a': 0, 'n': 1, 'last': ''}, {'intent': 'chat'})
-        self.assertIn('不要再结巴、脸红或撒娇', prompt)
+        self.assertIn('不要再重复得意、脸红或撒娇', prompt)
         _, _, flirting = examples_for(ROLE, 'frail', [], 'flirt')
         self.assertTrue(set(CATS['frail']).intersection(flirting))
 
@@ -56,15 +56,15 @@ class XiaozayuVoiceRules(unittest.TestCase):
 
 class XiaozayuVoiceIntegration(Fixture):
     def test_retry_receives_new_voice_guidance(self):
-        self.bot.llm.chat.side_effect = ['好开心呀~来贴贴！', '先说清你刚才的前提，别急着庆祝。']
+        self.bot.llm.chat.side_effect = ['好开心呀~来贴贴！', '哈？就这也值得庆祝？']
         result = self.bot.process(self.e(text='今天天气不错'), 'voice-retry')[0]['text']
-        self.assertEqual(result, '先说清你刚才的前提，别急着庆祝。')
+        self.assertEqual(result, '哈？就这也值得庆祝？')
         self.assertEqual(self.bot.llm.chat.call_count, 2)
         first = self.bot.llm.chat.call_args_list[0].args[1][0]['content']
         second = self.bot.llm.chat.call_args_list[1].args[1][0]['content']
         self.assertNotIn('本次改写校准', first)
         self.assertIn('本次改写校准', second)
-        self.assertIn('不是傻白甜', second)
+        self.assertIn('不要客服腔、长辈腔、说教或捧哏', second)
 
 
 if __name__ == '__main__':

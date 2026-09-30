@@ -10,8 +10,6 @@ import persona
 from test_bot import Fixture
 
 
-DEFLECT = '你猜错了也没奖哦~'
-ADMIT = '行吧，被你抓到了，我是 Bot 程序一个。'
 TODAY = time.strftime('%Y-%m-%d')
 
 
@@ -30,30 +28,34 @@ class PersonaIdentityFlow(Fixture):
     def any_deflect_in(self, prompt):
         return any(line in prompt for line in persona.CORPUS['identity_deflect'])
 
-    def test_first_question_deflects_second_admits(self):
-        self.ask('瑟瑟 你是 AI 吗？', ident='id-1')
-        prompt = self.prompt_of()
-        self.assertIn(DEFLECT, prompt)
-        self.assertNotIn(ADMIT, prompt)
-        self.assertEqual(self.probe(), {'n': 1, 'day': TODAY})
+    def any_admit_in(self, prompt):
+        return any(line in prompt for line in persona.CORPUS['honest_admit'])
 
-        self.ask('瑟瑟 你是 AI 吗？', ident='id-2')
+    def test_casual_questions_deflect_until_the_third_ask(self):
+        for ident, count in (('id-1', 1), ('id-2', 2)):
+            self.ask('瑟瑟 你是 AI 吗？', ident=ident)
+            prompt = self.prompt_of()
+            self.assertTrue(self.any_deflect_in(prompt))
+            self.assertFalse(self.any_admit_in(prompt))
+            self.assertEqual(self.probe(), {'n': count, 'day': TODAY})
+
+        self.ask('瑟瑟 你是 AI 吗？', ident='id-3')
         prompt = self.prompt_of()
-        self.assertIn(ADMIT, prompt)
+        self.assertTrue(self.any_admit_in(prompt))
         self.assertFalse(self.any_deflect_in(prompt))
-        self.assertEqual(self.probe(), {'n': 2, 'day': TODAY})
+        self.assertEqual(self.probe(), {'n': 3, 'day': TODAY})
 
-        self.ask('瑟瑟 你是 AI 吗？', user='33333', ident='id-3')
+        self.ask('瑟瑟 你是 AI 吗？', user='33333', ident='id-4')
         prompt = self.prompt_of()
         self.assertTrue(self.any_deflect_in(prompt))
-        self.assertNotIn(ADMIT, prompt)
+        self.assertFalse(self.any_admit_in(prompt))
         self.assertEqual(self.probe('33333'), {'n': 1, 'day': TODAY})
-        self.assertEqual(self.probe('22222'), {'n': 2, 'day': TODAY})
+        self.assertEqual(self.probe('22222'), {'n': 3, 'day': TODAY})
 
     def test_serious_marker_admits_immediately(self):
         self.ask('瑟瑟 认真回答，你是不是机器人？', ident='id-s1')
         prompt = self.prompt_of()
-        self.assertIn(ADMIT, prompt)
+        self.assertTrue(self.any_admit_in(prompt))
         self.assertFalse(self.any_deflect_in(prompt))
         self.assertEqual(self.probe(), {'n': 1, 'day': TODAY})
 
@@ -61,7 +63,7 @@ class PersonaIdentityFlow(Fixture):
         self.bot.store.set('g:33333', 'persona_identity_probe',
                            {'22222': {'n': 9, 'day': '2000-01-01'}})
         self.ask('瑟瑟 你是 AI 吗？', ident='id-d1')
-        self.assertIn(DEFLECT, self.prompt_of())
+        self.assertTrue(self.any_deflect_in(self.prompt_of()))
         self.assertEqual(self.probe(), {'n': 1, 'day': TODAY})
 
     def test_private_chat_writes_no_probe(self):
@@ -77,7 +79,7 @@ class PersonaIdentityCorpus(unittest.TestCase):
                 self.assertFalse(persona.ooc_check(line), line)
 
     def test_deflect_neither_confirms_nor_denies(self):
-        forbidden = ('我是真人', '我不是机器人', '当然是真人', '我不是 AI')
+        forbidden = ('我是真人', '我不是机器人', '当然是真人', '我不是 AI', '是个程序', 'Bot 程序', '我是程序')
         for line in persona.CORPUS['identity_deflect']:
             for word in forbidden:
                 self.assertNotIn(word, line)
@@ -87,6 +89,17 @@ class PersonaIdentityCorpus(unittest.TestCase):
         self.assertIn('认真', markers)
         self.assertTrue(persona.serious_marker_hit(persona.XIAOZAYU, '认真回答我'))
         self.assertFalse(persona.serious_marker_hit(persona.XIAOZAYU, '随便问问'))
+
+    def test_identity_path_threshold_comes_from_card(self):
+        from persona_cards.intents import identity_path
+        role = persona.XIAOZAYU
+        self.assertEqual(role.data['identity_policy']['admit_after_probes'], 2)
+        self.assertEqual(identity_path(role, 0, '你是 AI 吗'), 'deflect')
+        self.assertEqual(identity_path(role, 1, '你是 AI 吗'), 'deflect')
+        self.assertEqual(identity_path(role, 2, '你是 AI 吗'), 'admit')
+        self.assertEqual(identity_path(role, 0, '说真的，你是不是真人'), 'admit')
+        # Roles without the policy keep the old behaviour: the second question admits.
+        self.assertEqual(identity_path({'intents': {}}, 1, '你是 AI 吗'), 'admit')
 
 
 if __name__ == '__main__':

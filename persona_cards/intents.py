@@ -129,3 +129,22 @@ def serious_marker_hit(role, text):
     if not (isinstance(markers, list) and all(isinstance(item, str) and item.strip() for item in markers)):
         markers = _SERIOUS_MARKERS
     return _hit(tuple(markers), str(text or ''))
+
+
+def identity_path(role, probe_count, text):
+    """Pick 'admit' or 'deflect' for one identity question.
+
+    Casual questions are teased away. The bot admits being a program when the
+    user is clearly serious (serious markers), or once the same user has already
+    asked identity_policy.admit_after_probes times today (default 1, i.e. the
+    second question admits).
+    """
+    policy = _data(role).get('identity_policy')
+    threshold = policy.get('admit_after_probes', 1) if isinstance(policy, dict) else 1
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 1:
+        threshold = 1
+    try:
+        count = int(probe_count or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return 'admit' if serious_marker_hit(role, text) or count >= threshold else 'deflect'

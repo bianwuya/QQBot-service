@@ -91,8 +91,8 @@ def load_mood(store, scope, role):
 def mood_line(role, mood):
     mood = _valid_mood(mood)
     if mood['vibe'] == 'flustered':
-        return ('刚才被人起哄，耳朵还热着；这是群里的余温，不是当前说话者在夸你。'
-                '不要对无关群友继续脸红或撒娇，先回答眼前的话。') if role.id == 'xiaozayu' else '刚才被人起哄，耳朵还热着——只影响语气，不影响你回答的内容。'
+        return ('刚才有人夸到你，你还得意着；这是群里的余温，不是当前说话者在夸你。'
+                '不要对无关群友继续得意或撒娇，先回答眼前的话。') if role.id == 'xiaozayu' else '刚才被人起哄，耳朵还热着——只影响语气，不影响你回答的内容。'
     if mood['vibe'] == 'hurt':
         return '刚才有人越界，群里还沉着一点——只影响语气，不改事实。'
     return ''
