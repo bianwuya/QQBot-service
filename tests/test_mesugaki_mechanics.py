@@ -197,11 +197,14 @@ class StyleFatigue(unittest.TestCase):
         self.assertNotIn('不要再用“杂鱼”称呼', self.prompt(['杂鱼你好', '今天不错', '随便聊聊']))
 
     def test_other_habits_are_rationed_too(self):
-        self.assertIn('不要用“~”拖腔', self.prompt(['哈~', '随便', '诶~']))
-        self.assertNotIn('不要用“~”拖腔', self.prompt(['哈~', '随便', '今天不错']))
+        # Teasing particles are the brat voice: "~" may appear in most replies, just not three in a row.
+        self.assertIn('不要用“~”拖腔', self.prompt(['哈~', '随便~', '诶~']))
+        self.assertNotIn('不要用“~”拖腔', self.prompt(['哈~', '随便', '诶~']))
         self.assertIn('自称用“我”', self.prompt(['本小姐不想理你']))
-        self.assertIn('不要用“嘻嘻”', self.prompt(['好啊嘻嘻', '随便', '嗯', '行']))
-        self.assertNotIn('不要用“嘻嘻”', self.prompt(['好啊嘻嘻', '嗯', '随便', '行', '再见']))
+        # "嘻嘻" and "杂鱼" only need to skip the very next reply.
+        self.assertIn('不要用“嘻嘻”', self.prompt(['随便', '好啊嘻嘻']))
+        self.assertNotIn('不要用“嘻嘻”', self.prompt(['好啊嘻嘻', '随便']))
+        self.assertNotIn('不要再用“杂鱼”称呼', self.prompt(['杂鱼你好', '随便']))
 
     def test_senpai_is_suggested_only_in_light_talk_and_only_when_unused(self):
         suggestion = '最近几条回复没用过“前辈”'

@@ -212,18 +212,14 @@
     "normal": [
       [
         "daily",
+        2
+      ],
+      [
+        "smug",
         1
       ],
       [
         "provocation",
-        1
-      ],
-      [
-        "lose",
-        1
-      ],
-      [
-        "smug",
         1
       ]
     ],

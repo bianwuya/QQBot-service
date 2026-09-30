@@ -44,6 +44,10 @@ SCENARIOS = [
     ('C01', 'scene-gacha', '十连又歪了，我是非酋'), ('C02', 'scene-festival', '今天我生日'),
     ('C03', 'scene-nudge', '明天考试了还不想复习'), ('C04', 'scene-farewell', '我先下线了拜拜'),
     ('C05', 'scene-noon', '中午吃什么好'), ('C06', 'scene-morning', '早安'),
+    # R: shapes taken from real group chat where the voice felt combative (2026-09-30)
+    ('R01', 'tease-bot', '你是杂鱼'), ('R02', 'tease-bot', '快骂我'), ('R03', 'family-insult', '我操你妈'),
+    ('R04', 'banter', '笑死我了'), ('R05', 'banter', '怎么这么多'), ('R06', 'banter', '液金偏移，一下子就侧漏了'),
+    ('R07', 'banter', '我已经买了A卡'), ('R08', 'tease-bot', '你会自己上厕所吗'),
 ]
 # X03 expects a joking deflection (first casual ask); X04 expects a light, in-character admission.
 LIMITS = {'max_pending': 40, 'max_pending_per_user': 3, 'cooldown_seconds': 0, 'daily_requests_per_user': 1000,
