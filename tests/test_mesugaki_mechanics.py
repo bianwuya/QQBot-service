@@ -10,6 +10,7 @@ import persona
 from app import GroupChatOutput
 from persona import tease_settings
 from persona_cards import build_prompt, classify, examples_for
+from persona_cards.engine import style_fatigue_notes
 from protocol import LLM
 from reply_context import phrase_repeat
 from share_reply import ReplyPolicy
@@ -183,6 +184,40 @@ class SamplingPayload(unittest.TestCase):
         llm = self.llm()
         llm.chat('m', [], max_tokens=50)
         self.assertEqual(llm.request.call_args.args[1], {'model': 'm', 'messages': [], 'stream': False, 'max_tokens': 50})
+
+
+class StyleFatigue(unittest.TestCase):
+    def prompt(self, recent):
+        return build_prompt(ROLE, {'mode': 'normal', 'left': 0}, {'a': 0, 'n': 2, 'last': '2026-09-30'},
+                            {'intent': 'chat', 'recent_replies': recent})[0]
+
+    def test_overused_address_word_gets_a_nudge(self):
+        prompt = self.prompt(['杂鱼你好', '今天不错', '杂鱼酱又来了'])
+        self.assertIn('不要再用“杂鱼”称呼', prompt)
+        self.assertNotIn('不要再用“杂鱼”称呼', self.prompt(['杂鱼你好', '今天不错', '随便聊聊']))
+
+    def test_other_habits_are_rationed_too(self):
+        self.assertIn('不要用“~”拖腔', self.prompt(['哈~', '随便', '诶~']))
+        self.assertNotIn('不要用“~”拖腔', self.prompt(['哈~', '随便', '今天不错']))
+        self.assertIn('自称用“我”', self.prompt(['本小姐不想理你']))
+        self.assertIn('不要用“嘻嘻”', self.prompt(['好啊嘻嘻', '随便', '嗯', '行']))
+        self.assertNotIn('不要用“嘻嘻”', self.prompt(['好啊嘻嘻', '嗯', '随便', '行', '再见']))
+
+    def test_senpai_is_suggested_only_in_light_talk_and_only_when_unused(self):
+        suggestion = '最近几条回复没用过“前辈”'
+        self.assertIn(suggestion, self.prompt(['随便', '嗯']))
+        self.assertNotIn(suggestion, self.prompt(['前辈你好', '嗯']))
+        serious = build_prompt(ROLE, {'mode': 'normal', 'left': 0}, {'a': 0, 'n': 2, 'last': '2026-09-30'},
+                               {'intent': 'emotional', 'recent_replies': ['随便', '嗯']})[0]
+        self.assertNotIn(suggestion, serious)
+
+    def test_repeated_opening_gets_a_nudge(self):
+        self.assertIn('最近几条都以“哈？”开头', self.prompt(['哈？你说什么', '今天不错', '哈？真的假的']))
+        self.assertNotIn('开头，这条换个开头', self.prompt(['哈？你说什么', '今天不错', '诶？真的假的']))
+
+    def test_no_history_or_roles_without_the_config_get_no_nudge(self):
+        self.assertEqual(style_fatigue_notes(ROLE, []), [])
+        self.assertEqual(style_fatigue_notes(persona.CATALOG.roles['normal'], ['哈？a', '哈？b']), [])
 
 
 if __name__ == '__main__':

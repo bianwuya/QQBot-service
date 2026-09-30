@@ -159,6 +159,58 @@ def retry_guidance(role):
     return custom.strip() if isinstance(custom, str) and custom.strip() else '保持当前角色的行为规则。'
 
 
+def _opener(text):
+    text = re.sub(r'^[\s"“”「」()（）]+', '', str(text or ''))
+    match = re.match(r'[^，,。！？!?~～…—\s]{1,3}[？?！!~～]?', text)
+    return match.group(0) if match else ''
+
+
+def style_fatigue_notes(role, recent_replies=(), intent=None):
+    """Prompt nudges against monotony: habits over-used in the last few replies and a repeated opening."""
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    style = data.get('style') if isinstance(data.get('style'), dict) else {}
+    cfg = style.get('fatigue')
+    if not isinstance(cfg, dict):
+        return []
+    recent_all = [item for item in (recent_replies or ()) if isinstance(item, str)]
+
+    def positive(value, default):
+        return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+
+    notes = []
+    for item in cfg.get('items', []) if isinstance(cfg.get('items'), list) else []:
+        if not isinstance(item, dict) or not all(isinstance(item.get(k), str) for k in ('regex', 'label', 'avoid')):
+            continue
+        window, hits = positive(item.get('window'), 3), positive(item.get('hits'), 1)
+        try:
+            used = sum(1 for text in recent_all[-window:] if re.search(item['regex'], text))
+        except re.error:
+            continue
+        if used >= hits:
+            notes.append('最近几条回复已经用过{}，{}'.format(item['label'], item['avoid']))
+    for item in cfg.get('suggest', []) if isinstance(cfg.get('suggest'), list) else []:
+        if not isinstance(item, dict) or not all(isinstance(item.get(k), str) for k in ('regex', 'label', 'text')):
+            continue
+        if isinstance(item.get('intents'), list) and intent not in item['intents']:
+            continue
+        try:
+            used = any(re.search(item['regex'], text) for text in recent_all[-positive(item.get('window'), 4):])
+        except re.error:
+            continue
+        if not used:
+            notes.append('最近几条回复没用过{}，{}'.format(item['label'], item['text']))
+    opener_cfg = cfg.get('opener')
+    if isinstance(opener_cfg, dict):
+        window, hits = positive(opener_cfg.get('window'), 3), positive(opener_cfg.get('hits'), 2)
+        recent = recent_all[-window:]
+        openers = [_opener(text) for text in recent]
+        if len(recent) >= hits:
+            for opener in dict.fromkeys(openers):
+                if opener and openers.count(opener) >= hits:
+                    notes.append('最近几条都以“{}”开头，这条换个开头。'.format(opener))
+    return notes
+
+
 def ooc_prompt_words(role):
     config = _ooc_config(role)
     words = config['hard'] + config['service_tone']
@@ -305,6 +357,8 @@ def build_prompt(role, state, relation, context):
     mood_line = str(context.get('mood_line', '')).strip()
     if mood_line:
         state_label += '\n'+mood_line
+    for note in style_fatigue_notes(role, context.get('recent_replies'), context.get('intent')):
+        state_label += '\n'+note
     count = relation.get('n', 0)
     memory = '互动次数：{}｜亲密度：{}｜最后见面：{}'.format(
         count, relation_level(role, relation.get('a', 0)),

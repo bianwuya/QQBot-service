@@ -192,6 +192,7 @@ class Bot:
             self.metrics.emit('ingest_rejected')
     def scope_text(self,e,text):return [{'kind':'text','text':text}]
     def typing_pause(self,seconds):time.sleep(seconds)
+    def recent_replies_for(self,scope):return self.group_window.recent_replies(scope) if self.group_context_enabled(scope) else ()
     def tease_level(self,scope,role):
         tease=role.data.get('tease')
         levels=tease.get('levels') if isinstance(tease,dict) else None
@@ -558,7 +559,7 @@ class Bot:
         state,used=persona.load_runtime(self.store,scope,role,owner=owner)
         mood=persona.load_mood(self.store,scope,role)
         state,triggered=persona.begin_turn(role,state,text)
-        context={'used':used,'scope':scope,'owner':owner,'intent':intent,'tease_level':self.tease_level(scope,role),
+        context={'used':used,'scope':scope,'owner':owner,'intent':intent,'tease_level':self.tease_level(scope,role),'recent_replies':self.recent_replies_for(scope),
                  'mood_line':persona.mood_line(role,mood),
                  'variation_seed':relation['n']+int(owner[-4:]) if owner.isdigit() else relation['n']}
         if intent=='identity':
@@ -591,7 +592,7 @@ class Bot:
         state,used=persona.load_runtime(self.store,scope,role,owner=owner)
         mood=persona.load_mood(self.store,scope,role)
         state,triggered=persona.begin_turn(role,state,question)
-        context={'used':used,'scope':scope,'owner':owner,'intent':intent,'tease_level':self.tease_level(scope,role),
+        context={'used':used,'scope':scope,'owner':owner,'intent':intent,'tease_level':self.tease_level(scope,role),'recent_replies':self.recent_replies_for(scope),
                  'mood_line':persona.mood_line(role,mood),
                  'variation_seed':relation['n']+int(owner[-4:]) if owner.isdigit() else relation['n']}
         if intent=='identity':
