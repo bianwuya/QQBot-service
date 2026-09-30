@@ -126,7 +126,9 @@ class CalibrationText(unittest.TestCase):
             with self.subTest(intent=intent):
                 self.assertNotIn('先答对再带口吻', output_instruction(ROLE, intent))
         self.assertIn('语气外放', output_instruction(ROLE, 'chat'))
-        self.assertIn('先嫌一句', output_instruction(ROLE, 'tech_help'))
+        self.assertIn('裹在她的口气里', output_instruction(ROLE, 'tech_help'))
+        # Comfort replies must not be told to tease first (the long lead is shared with tech_help).
+        self.assertNotIn('先嫌一句', output_instruction(ROLE, 'emotional'))
 
     def test_other_roles_keep_the_default_instruction(self):
         self.assertIn('先答对再带口吻', output_instruction(NORMAL, 'tech_help'))
