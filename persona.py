@@ -28,6 +28,9 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            trigger_hit as _trigger_hit)
 
 
+from persona_cards.intents import identity_path as _identity_path
+
+
 ROLE_ROOT = Path(__file__).resolve().parent/'persona_cards'/'roles'
 CATALOG = load_catalog(ROLE_ROOT)
 DEFAULT_ROLE_ID = CATALOG.default_id
@@ -165,6 +168,12 @@ def identity_probe(store, scope, owner):
     return _load_identity_probe(store, scope, owner)
 
 
+def identity_path(store, scope, owner, role, text):
+    """Return 'admit' or 'deflect' for an identity question (see persona_cards.intents)."""
+    probe = _load_identity_probe(store, scope, owner)
+    count = probe.get('n', 0) if isinstance(probe, dict) else 0
+    return _identity_path(role, count, text)
+
+
 def note_identity_probe(store, scope, owner):
     return _note_identity_probe(store, scope, owner)
-

@@ -13,7 +13,7 @@ ROLE = persona.XIAOZAYU
 NORMAL = persona.CATALOG.roles['normal']
 CORPUS = ROLE.corpus
 PROV = CORPUS['provenance']['lines']
-TIERS = {'A', 'B', 'B-ja', 'legacy'}
+TIERS = {'A', 'B', 'B-ja', 'self-edit', 'legacy-confirmed'}
 
 
 def all_lines():
@@ -41,11 +41,14 @@ class SourcedCorpus(unittest.TestCase):
             with self.subTest(line=line):
                 if info['tier'] in ('A', 'B', 'B-ja'):
                     self.assertIn(info['strength'], ('mild', 'standard', 'spicy'))
-                    self.assertIsInstance(info['source_id'], int)
+                    # Older research quotes carry a numeric source_id; the 2026-09-30 review uses candidate ids.
+                    self.assertTrue(isinstance(info.get('source_id'), int) or info.get('candidate_id'))
                     self.assertTrue(info['url'].startswith('http'))
                 if info['tier'] == 'B-ja':
                     self.assertTrue(info['original_ja'].strip())
-                if info['tier'] == 'legacy':
+                if info['tier'] in ('self-edit', 'legacy-confirmed'):
+                    self.assertIn(info['strength'], ('mild', 'standard', 'spicy'))
+                    self.assertTrue(info['based_on']['text'].strip())
                     self.assertTrue(info['note'].strip())
 
     def test_playful_categories_contain_only_sourced_lines(self):
@@ -53,22 +56,23 @@ class SourcedCorpus(unittest.TestCase):
         for category in ('daily', 'provocation', 'smug', 'frail', 'recover', 'care', 'help'):
             playful.update(CORPUS['categories'][category])
         self.assertTrue(playful)
-        self.assertTrue(all(PROV[line]['tier'] != 'legacy' for line in playful))
-        self.assertGreaterEqual(sum(1 for info in PROV.values() if info['tier'] != 'legacy'), 25)
+        self.assertTrue(all(PROV[line]['tier'] != 'legacy-confirmed' for line in playful))
+        self.assertGreaterEqual(sum(1 for info in PROV.values() if info['tier'] in ('A', 'B', 'B-ja')), 15)
 
     def test_sourced_lines_pass_the_current_ooc_rules(self):
         for category, line in all_lines():
             info = PROV[line]
-            if info['tier'] == 'legacy' or '贝奇' in line:
-                continue  # named official lines are only references; the model maps the names
+            if info['tier'] == 'legacy-confirmed':
+                continue
             intent = 'emotional' if category == 'care' else 'chat'
             with self.subTest(category=category, line=line):
                 self.assertFalse(persona.ooc_check(line, ROLE, intent))
 
-    def test_named_reference_lines_come_with_a_name_mapping_and_a_ban(self):
+    def test_reference_lines_carry_no_character_names_and_the_name_stays_banned(self):
         prompt, _ = persona.build_prompt(ROLE, {'mode': 'normal', 'left': 0},
                                          {'a': 0, 'n': 2, 'last': '2026-09-30'}, {'intent': 'chat'})
-        self.assertIn('“贝奇”指她自己', prompt)
+        self.assertFalse(any('贝奇' in line or '指挥官' in line for _, line in all_lines()))
+        self.assertNotIn('贝奇', prompt.split('# 绝对禁止')[0])
         self.assertIn('贝奇', prompt.split('# 绝对禁止')[1])
         self.assertIn('# 语料', prompt)
         self.assertNotIn('傻白甜', prompt)

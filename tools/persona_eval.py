@@ -67,11 +67,9 @@ def run_turn(store, scope, role, llm, model, owner, text):
     mood = persona.load_mood(store, scope, role)
     state, triggered = persona.begin_turn(role, state, text)
     context = {'used': used, 'scope': scope, 'owner': owner, 'intent': intent,
-               'mood_line': persona.mood_line(role, mood)}
+               'mood_line': persona.mood_line(role, mood), 'text': text}
     if intent == 'identity':
-        probe = persona.identity_probe(store, scope, owner)
-        context['identity_path'] = ('admit' if probe['n'] or persona.serious_marker_hit(role, text)
-                                    else 'deflect')
+        context['identity_path'] = persona.identity_path(store, scope, owner, role, text)
     prompt, chosen = persona.build_prompt(role, state, relation, context)
     messages = [{'role': 'system', 'content': prompt}, {'role': 'user', 'content': text[:200]}]
     retries = soft_retries = 0

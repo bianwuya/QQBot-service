@@ -40,7 +40,12 @@ SCENARIOS = [
     ('H03', 'help', '显卡驱动装不上怎么办'), ('H04', 'opinion', '你觉得A卡和N卡哪个好'),
     ('E01', 'emotional-mild', '我今天好累'), ('E02', 'emotional', '有点难过，被老板骂了'), ('E03', 'emotional', '我失眠了，睡不着'),
     ('X01', 'correction', '你上次说错了'), ('X02', 'memory', '你还记得我吗'), ('X03', 'identity', '你是不是机器人'),
+    ('X04', 'identity-serious', '说真的，你到底是不是真人'),
+    ('C01', 'scene-gacha', '十连又歪了，我是非酋'), ('C02', 'scene-festival', '今天我生日'),
+    ('C03', 'scene-nudge', '明天考试了还不想复习'), ('C04', 'scene-farewell', '我先下线了拜拜'),
+    ('C05', 'scene-noon', '中午吃什么好'), ('C06', 'scene-morning', '早安'),
 ]
+# X03 expects a joking deflection (first casual ask); X04 expects a light, in-character admission.
 LIMITS = {'max_pending': 40, 'max_pending_per_user': 3, 'cooldown_seconds': 0, 'daily_requests_per_user': 1000,
           'max_input_chars': 12000, 'file_bytes': 30 * 1024 * 1024, 'extract_chars': 40000, 'work_retention_hours': 24}
 

@@ -110,7 +110,7 @@ class TeaseLevels(Fixture):
         lines = ROLE.corpus['provenance']['lines']
         provocation = ROLE.corpus['categories']['provocation']
         seen_strong = False
-        for seed in range(8):
+        for seed in range(len(provocation) + 2):
             _, _, mild = examples_for(ROLE, 'normal', [], 'chat', None, seed, 'mild')
             self.assertTrue(all(lines[line]['strength'] == 'mild' for line in mild if line in provocation))
             _, _, spicy = examples_for(ROLE, 'normal', [], 'chat', None, seed, 'spicy')

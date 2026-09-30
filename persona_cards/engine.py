@@ -277,7 +277,47 @@ _TASK_INTENTS = frozenset(('tech_help', 'emotional', 'identity', 'memory',
                            'correction', 'boundary', 'unclear'))
 
 
-def examples_for(role, mode, used, intent=None, identity_path=None, variation=0, tease_level=None):
+def scenario_categories(role, intent, text):
+    """Return corpus categories whose scenario rule matches this chat message.
+
+    Rules live in corpus.json under scenario_rules; task intents never use them,
+    so help, comfort, identity and memory prompts keep their fixed exemplars.
+    """
+    corpus = role.corpus if isinstance(role.corpus, dict) else {}
+    config = corpus.get('scenario_rules')
+    if not isinstance(config, dict) or intent in _TASK_INTENTS:
+        return []
+    text = text if isinstance(text, str) else ''
+    if not text.strip():
+        return []
+    allowed = config.get('intents')
+    if isinstance(allowed, list) and intent not in allowed:
+        return []
+    limit = config.get('max_hits', 2)
+    limit = limit if isinstance(limit, int) and limit > 0 else 2
+    categories = corpus.get('categories', {})
+    hits = []
+    for rule in config.get('rules') or []:
+        if not isinstance(rule, dict):
+            continue
+        category = rule.get('category')
+        if not isinstance(category, str) or category in hits or not categories.get(category):
+            continue
+        patterns = rule.get('patterns')
+        patterns = [item for item in patterns if isinstance(item, str) and item] if isinstance(patterns, list) else []
+        rule_intents = rule.get('intents')
+        if isinstance(rule_intents, list):
+            matched = intent in rule_intents and (not patterns or _regex_hit(patterns, text))
+        else:
+            matched = bool(patterns) and _regex_hit(patterns, text)
+        if matched:
+            hits.append(category)
+            if len(hits) >= limit:
+                break
+    return hits
+
+
+def examples_for(role, mode, used, intent=None, identity_path=None, variation=0, tease_level=None, text=None):
     # Identity probes rely on stable deflect/admit exemplars; keep those fixed.
     if intent == 'identity':
         variation = 0
@@ -301,11 +341,27 @@ def examples_for(role, mode, used, intent=None, identity_path=None, variation=0,
         category = 'identity_deflect' if identity_path == 'deflect' else 'honest_admit'
         intent_plan = [[category, 2]]
     chosen = []
+    # A matching chat scenario (morning greeting, lost gacha pull, thanks...)
+    # contributes one exemplar each and takes the place of generic ones, so the
+    # prompt keeps the same number of examples.
+    scenario = scenario_categories(role, intent, text)
+    cap = None
+    if scenario:
+        budget = sum(max(0, int(entry[1])) for entry in list(plan) + list(intent_plan or [])
+                     if isinstance(entry, list) and len(entry) == 2)
+        for category in scenario:
+            chosen += _pick(role, category, used+chosen, 1, variation+len(chosen) if isinstance(variation,int) else 0, tease_level)
+        cap = max(budget, len(chosen))
     for entry in list(plan) + list(intent_plan or []):
         if not isinstance(entry, list) or len(entry) != 2:
             continue
         category, count = entry
-        chosen += _pick(role, category, used+chosen, max(0, int(count)), variation+len(chosen) if isinstance(variation,int) else 0, tease_level)
+        count = max(0, int(count))
+        if cap is not None:
+            count = min(count, cap-len(chosen))
+            if count <= 0:
+                continue
+        chosen += _pick(role, category, used+chosen, count, variation+len(chosen) if isinstance(variation,int) else 0, tease_level)
     state = role.states.get('modes', {}).get(mode) or role.states['modes'][role.states['default']]
     return state['label'], '\n'.join('· '+line for line in chosen), chosen
 
@@ -347,7 +403,8 @@ def build_prompt(role, state, relation, context):
         mode = role.states['default']
     tease_key, _tease_label, tease_rule = tease_settings(role, context.get('tease_level'))
     state_label, corpus_block, chosen = examples_for(
-        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0), tease_key)
+        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0), tease_key,
+        context.get('text'))
     if (role.id == 'xiaozayu' and mode == role.states.get('trigger_mode')
             and context.get('intent') != 'flirt'):
         recovered = role.states.get('recovered_label')
