@@ -38,6 +38,9 @@ _UNSUPPORTED = re.compile(r'\[SEND_IMAGE:\d+\]|\[SEARCH_IMAGE\]|\[UPSCALE\]|[<>]
 _URL = re.compile(r'https?://\S+', re.I)
 _ID = re.compile(r'\d{5,20}\Z')
 _MESSAGE_ID = re.compile(r'\d{1,20}\Z')
+_BREAKS = '。！？!?'
+_CONNECTIVES = ('可是', '但是', '不过', '所以', '而且', '然后', '还有', '倒是', '只是', '反正', '毕竟', '否则', '要不然')
+_POKE_INTENTS = ('chat', 'greeting', 'insult', 'flirt')
 
 
 def parse_actions(answer, allow=False):
@@ -124,7 +127,8 @@ class ReplyPolicy:
                                   (scope, owner, kind, day, count + 1, now))
         return True
 
-    def split(self, reply, probability=.55):
+    def split(self, reply, probability=.2):
+        """Split only at a finished sentence, so every message is a complete thought."""
         n = len(reply)
         if n < 16:
             return None
@@ -133,17 +137,18 @@ class ReplyPolicy:
             return None
         mid = n // 2
         lo, hi = max(1, int(n * .25)), min(n - 1, int(n * .75))
-        for choices in ('\n', '，,。！？!?；;、…'):
-            indexes = [i for i in range(lo, hi) if reply[i] in choices]
-            if indexes:
-                cut = min(indexes, key=lambda i: abs(i - mid)) + 1
-                a, b = reply[:cut].strip().rstrip('，,、:：;；'), reply[cut:].strip()
-                if len(a) >= 4 and len(b) >= 4:
+        for choices in ('\n', _BREAKS):
+            for cut in sorted((i + 1 for i in range(lo, hi) if reply[i] in choices), key=lambda c: abs(c - mid)):
+                a, b = reply[:cut].strip(), reply[cut:].strip()
+                if len(a) >= 6 and len(b) >= 6 and not b.startswith(_CONNECTIVES):
                     return [a, b]
-                return None
         return None
 
-    def format(self, event, answer, actions=(), split_probability=.55, poke_probability=.15):
+    def typing_delay(self, text):
+        """Seconds a person needs to type the text; only used between the parts of one split reply."""
+        return round(min(3.0, max(1.0, .8 + .05 * len(text) + self.rng() * .6)), 2)
+
+    def format(self, event, answer, actions=(), split_probability=.2, poke_probability=.15):
         """Fix randomized parts *before* outbox persistence; only style chat."""
         parts = self.split(answer, split_probability) or [answer]
         outputs = []
@@ -154,11 +159,15 @@ class ReplyPolicy:
                 mid = str(event.get('message_id') or '')
                 if _MESSAGE_ID.fullmatch(mid) and self.rng() < .5:
                     item['quote_source'] = mid
+            if i > 0:
+                item['delay'] = self.typing_delay(part)
             outputs.append(item)
         if event.get('at') and not event.get('notice'):
             for action in actions:
                 if requested(event.get('text'), action):
                     outputs.append({'kind': 'share_action', 'action': action})
-        if self.rng() < min(1., max(0., poke_probability)):
+        intent = event.get('_persona_intent')
+        light = (intent is None or intent in _POKE_INTENTS) and len(answer) <= 48   # never poke after serious answers
+        if light and self.rng() < min(1., max(0., poke_probability)):
             outputs.append({'kind': 'share_action', 'action': {'type': 'poke', 'args': []}})
         return outputs

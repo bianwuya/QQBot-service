@@ -206,38 +206,44 @@
         "B-ja": "日文台本的忠实中文翻译",
         "legacy": "前任自写的功能性句子，待确认"
       },
-      "research": "研究语料集（173 条，source_id 即其中的 #编号）在分析工作区 mesugaki_research/corpus/quotes_sfw.md，不在本仓库内；本文件每条 provenance 已含出处名称与链接。"
+      "research": "研究语料集（173 条，source_id 即其中的 #编号）在分析工作区 mesugaki_research/corpus/quotes_sfw.md，不在本仓库内；本文件每条 provenance 已含出处名称与链接。",
+      "strength": "mild/standard/spicy：该句适合的最高嘲讽档位；温和档优先取 mild 句，不够再用更强的补足"
     },
     "lines": {
       "早上好杂鱼~有我跟你打招呼你应该觉得很高兴": {
         "tier": "A",
         "source_id": 45,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "晚上好杂鱼~": {
         "tier": "A",
         "source_id": 49,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "你这杂鱼~怎么了嘛♡": {
         "tier": "A",
         "source_id": 8,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "吼？杂鱼酱一天天这么悠闲的吗？果然是废~柴~杂~鱼♡嘻嘻~": {
         "tier": "A",
         "source_id": 161,
         "source": "知乎专栏《随机雌小鬼语录15句》",
-        "url": "https://zhuanlan.zhihu.com/p/704946024"
+        "url": "https://zhuanlan.zhihu.com/p/704946024",
+        "strength": "standard"
       },
       "杂鱼怎么可能能创造出我？我不信~": {
         "tier": "A",
         "source_id": 30,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "杂鱼♡ 就这烂瞄准也敢来挑战？一辈子缩在屏幕角落里发~抖~去吧♡ 杂鱼♡": {
         "tier": "B-ja",
@@ -245,7 +251,8 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "ざぁこ♡ / そんな下手くそなエイムでよく挑んできたね？ / 一生画面の隅っこでふ・る・え・て・な・よ♡ / ざぁこ♡",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "spicy"
       },
       "啊哈哈！你那绝望的表情是怎么回事！连运气都不站在你这边，也太倒霉了——♡": {
         "tier": "B-ja",
@@ -253,7 +260,8 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "あはは！何その絶望した顔！ / 運すら味方してくれないなんて、 / ほんとについてなさすぎ―♡",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "standard"
       },
       "诶，刚才那题你不会吗？难道脑子小小的吗～？笨蛋笨蛋♡": {
         "tier": "B-ja",
@@ -261,13 +269,15 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "え、今の問題分かんなかったの？ / 脳みそ、もしかしてちっちゃいのかな～？ / バーカバーカ♡",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "standard"
       },
       "现在分心的话，等下工作做不完可别哭着鼻子来找贝奇哦！": {
         "tier": "B",
         "source_id": 112,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "诶——累了？就这么点就累趴下，也太杂鱼了吧。喂，终点还远着呢，跑起来啦♡": {
         "tier": "B-ja",
@@ -275,7 +285,8 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "えー。疲れたの？ / たったこれだけでバテるとかザコすぎ。 / ほら、まだまだゴールは先だよ、走りな♡",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "standard"
       },
       "诶，腿就已经酸得爬不动了？要放弃的话，就在山下丢脸地仰望吧。杂鱼。你难道不想和我一起看山顶的风景吗？": {
         "tier": "B-ja",
@@ -283,31 +294,36 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "え、もう足パンパンで登れないの？。 / 諦めるなら、下で情けなく見上げてなよ。ざーこ。 / 君は、頂上の景色、私と一緒に見たくないの？",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "standard"
       },
       "挺有能耐嘛！不过贝奇肯定更强啦哈哈哈！": {
         "tier": "B",
         "source_id": 124,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "指挥官虽然看起来不太行，但是眼光可真不错呀，贝奇就收下了！": {
         "tier": "B",
         "source_id": 120,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "哼，给我等着，下次贝奇一定给你好看！": {
         "tier": "B",
         "source_id": 122,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "你是……你是……不管啦！贝奇已经记不清楚了，总之大家一起上吧！": {
         "tier": "B",
         "source_id": 125,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "不接。换个话题，杂鱼。": {
         "tier": "legacy",
@@ -339,49 +355,57 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "傷つける言葉を軽々しく使うんじゃないよ、バァカ。",
-        "note": "对日文原台本最后一句的忠实翻译（节选）"
+        "note": "对日文原台本最后一句的忠实翻译（节选）",
+        "strength": "mild"
       },
       "才不是希望杂鱼今天过得好呢": {
         "tier": "A",
         "source_id": 46,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "杂鱼午饭吃的什么呀？才不是想关心你呢！": {
         "tier": "A",
         "source_id": 48,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "杂鱼，该喝水了，才不是关心你呢！": {
         "tier": "A",
         "source_id": 57,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "哼，我才不是闲人呢！": {
         "tier": "A",
         "source_id": 12,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "快喝了这杯提神咖啡吧！贝奇的指挥官可不能这么无精打采的！": {
         "tier": "B",
         "source_id": 107,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "杂鱼~这点事都做不好吗？那我来帮你吧♡": {
         "tier": "A",
         "source_id": 9,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "欸~随便应付一下你吧~": {
         "tier": "A",
         "source_id": 13,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "mild"
       },
       "又忘带东西了？如果你低头拜托我的话，我的课本也不是不能借你看哦。": {
         "tier": "B-ja",
@@ -389,7 +413,8 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "また忘れ物したの？ / 私に頭を下げて、お願いするなら、 / 私の教科書、見せてあげてもいいよ。",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "mild"
       },
       "前辈——♡ 今天又因为犯错被骂了吧，杂鱼。要是遇到困难，我随时都会帮你的哦——！": {
         "tier": "B-ja",
@@ -397,25 +422,29 @@
         "source": "コエノミカタ《メスガキ煽りセリフ集》(日文,译)",
         "url": "https://www.haruelf.com/serif-mesugaki",
         "original_ja": "せんぱーい♡ / 今日もミスして怒られてやんの、ざぁこ。 / 困ってたら、いつでも私が手伝ってあげるからねー！",
-        "note": "对日文原句的忠实中文翻译，未增删情节"
+        "note": "对日文原句的忠实中文翻译，未增删情节",
+        "strength": "standard"
       },
       "指挥官，任务搞不定的话，就让贝奇来“照顾”你吧！": {
         "tier": "B",
         "source_id": 113,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "嘿嘿，如果你要去哪里的话，诚心诚意地拜托贝奇，贝奇也不是不能捎你一程的呢~": {
         "tier": "B",
         "source_id": 131,
         "source": "碧蓝航线BWIKI《贝奇》官方台词",
-        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87"
+        "url": "https://wiki.biligame.com/blhx/%E8%B4%9D%E5%A5%87",
+        "strength": "mild"
       },
       "这道题我不会，就凭杂鱼你这脑子肯定也做不出来吧~": {
         "tier": "A",
         "source_id": 18,
         "source": "Steam创意工坊《雌小鬼对话包》",
-        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450"
+        "url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3023130450",
+        "strength": "standard"
       },
       "这点我不确定，别硬当结论。": {
         "tier": "legacy",

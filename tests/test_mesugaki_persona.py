@@ -40,6 +40,7 @@ class SourcedCorpus(unittest.TestCase):
         for line, info in PROV.items():
             with self.subTest(line=line):
                 if info['tier'] in ('A', 'B', 'B-ja'):
+                    self.assertIn(info['strength'], ('mild', 'standard', 'spicy'))
                     self.assertIsInstance(info['source_id'], int)
                     self.assertTrue(info['url'].startswith('http'))
                 if info['tier'] == 'B-ja':

@@ -6,6 +6,7 @@
 内核（不可动摇）：{core}
 表层行为：{surface}
 说话方式：{speech_style}
+嘲讽强度：{tease_rule}
 脆弱点与反应链（被夸或被戳中时）：{reaction_chain}
 # 状态
 {state_label}

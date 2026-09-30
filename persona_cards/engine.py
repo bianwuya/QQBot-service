@@ -176,20 +176,56 @@ def fallback_line(role, used, intent=None):
     return next((line for line in pool if line not in used), pool[0])
 
 
-def _pick(role, category, used, count, variation=0):
+_LEVEL_ORDER = ('mild', 'standard', 'spicy')
+
+
+def _strength_rank(role, text):
+    provenance = role.corpus.get('provenance') if isinstance(role.corpus, dict) else None
+    lines = provenance.get('lines') if isinstance(provenance, dict) else None
+    info = lines.get(text) if isinstance(lines, dict) else None
+    value = info.get('strength') if isinstance(info, dict) else None
+    return _LEVEL_ORDER.index(value) if value in _LEVEL_ORDER else 0
+
+
+def tease_settings(role, level=None):
+    """Return (key, label, rule) of the tease level; (None, '', '') for roles without the setting."""
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    tease = data.get('tease')
+    levels = tease.get('levels') if isinstance(tease, dict) else None
+    if not isinstance(levels, dict) or not levels:
+        return None, '', ''
+    key = level if level in levels else tease.get('default')
+    if key not in levels:
+        key = next(iter(levels))
+    item = levels[key] if isinstance(levels[key], dict) else {}
+    return key, str(item.get('label', key)), str(item.get('rule', ''))
+
+
+def _rotate(items, shift):
+    if not items:
+        return items
+    shift %= len(items)
+    return items[shift:] + items[:shift]
+
+
+def _pick(role, category, used, count, variation=0, level=None):
     source = role.corpus['categories'].get(category, [])
     pool = [line for line in source if line not in used] or source
-    if pool and isinstance(variation, int):
-        shift = variation % len(pool)
-        pool = pool[shift:] + pool[:shift]
-    return pool[:count]
+    shift = variation if isinstance(variation, int) else 0
+    if level in _LEVEL_ORDER:
+        # Prefer lines at or below the tease level, then fill up from the stronger ones.
+        cap = _LEVEL_ORDER.index(level)
+        allowed = [line for line in pool if _strength_rank(role, line) <= cap]
+        rest = [line for line in pool if line not in allowed]
+        return (_rotate(allowed, shift) + _rotate(rest, shift))[:count]
+    return _rotate(pool, shift)[:count]
 
 
 _TASK_INTENTS = frozenset(('tech_help', 'emotional', 'identity', 'memory',
                            'correction', 'boundary', 'unclear'))
 
 
-def examples_for(role, mode, used, intent=None, identity_path=None, variation=0):
+def examples_for(role, mode, used, intent=None, identity_path=None, variation=0, tease_level=None):
     # Identity probes rely on stable deflect/admit exemplars; keep those fixed.
     if intent == 'identity':
         variation = 0
@@ -217,7 +253,7 @@ def examples_for(role, mode, used, intent=None, identity_path=None, variation=0)
         if not isinstance(entry, list) or len(entry) != 2:
             continue
         category, count = entry
-        chosen += _pick(role, category, used+chosen, max(0, int(count)), variation+len(chosen) if isinstance(variation,int) else 0)
+        chosen += _pick(role, category, used+chosen, max(0, int(count)), variation+len(chosen) if isinstance(variation,int) else 0, tease_level)
     state = role.states.get('modes', {}).get(mode) or role.states['modes'][role.states['default']]
     return state['label'], '\n'.join('· '+line for line in chosen), chosen
 
@@ -257,8 +293,9 @@ def build_prompt(role, state, relation, context):
     mode = state.get('mode', role.states['default']) if isinstance(state, dict) else role.states['default']
     if mode not in role.states['modes']:
         mode = role.states['default']
+    tease_key, _tease_label, tease_rule = tease_settings(role, context.get('tease_level'))
     state_label, corpus_block, chosen = examples_for(
-        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0))
+        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0), tease_key)
     if (role.id == 'xiaozayu' and mode == role.states.get('trigger_mode')
             and context.get('intent') != 'flirt'):
         recovered = role.states.get('recovered_label')
@@ -288,6 +325,7 @@ def build_prompt(role, state, relation, context):
         'behavior_block': behavior_block(role, context.get('intent')),
         'memory_behavior': role.data['memory_behavior'],
         'output_instruction': output_instruction(role, context.get('intent')),
+        'tease_rule': tease_rule,
     }
     try:
         prompt = role.prompt.format(**values)

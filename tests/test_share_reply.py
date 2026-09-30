@@ -144,7 +144,7 @@ class ShareReplyRules(Fixture):
     def test_split_and_half_quote_only_first_message_and_receipts(self):
         e=self.at_event('请解释一下',mid=123456)
         self.bot.share_reply.rng=lambda:0
-        outputs=self.bot.share_reply.format(e,'这件事先看第一步，接着观察第二步。',[],poke_probability=0)
+        outputs=self.bot.share_reply.format(e,'这件事先看第一步。接着观察第二步。',[],poke_probability=0)
         self.assertEqual(len(outputs),2)
         self.assertEqual(outputs[0]['quote_source'],'123456')
         self.assertEqual(outputs[0]['at_user'],'22222')

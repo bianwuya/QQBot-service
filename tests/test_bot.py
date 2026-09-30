@@ -32,7 +32,7 @@ class Fixture(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name);self.cfg=copy.deepcopy(CFG)
         self.bot=Bot(self.root,lambda:self.cfg);self.bot.ob=Mock();self.bot.llm=Mock();self.bot.llm.models.return_value=['test-model','other-model']
-        self.bot.llm.chat.return_value='测试回答';self.dir=self.root/'work'/'test';self.dir.mkdir()
+        self.bot.llm.chat.return_value='测试回答';self.dir=self.root/'work'/'test';self.dir.mkdir();self.bot.typing_pause=lambda seconds:None
     def tearDown(self):
         self.bot.store.db.close();self.temp.cleanup()
     def e(self,**kwargs):return normalize(event(**kwargs))

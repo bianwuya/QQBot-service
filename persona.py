@@ -23,6 +23,7 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            retry_guidance as _retry_guidance,
                            save_runtime as _save_runtime,
                            selection_scope, soften_hearts as _soften_hearts,
+                           tease_settings as _tease_settings,
                            touch as _touch,
                            trigger_hit as _trigger_hit)
 
@@ -89,6 +90,10 @@ def retry_guidance(role=None):
 
 def soften_hearts(text, role=None, recent_replies=()):
     return _soften_hearts(role or XIAOZAYU, text, recent_replies)
+
+
+def tease_settings(role=None, level=None):
+    return _tease_settings(role or XIAOZAYU, level)
 
 
 def fallback_line(used, role=None, intent=None):

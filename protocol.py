@@ -12,7 +12,7 @@ from model_router import ModelFailure
 
 class DeliveryUnknown(RuntimeError):pass
 
-ADMIN_COMMANDS={'/模型','/模型列表','/默认模型','/角色','/角色列表','/记忆','/启用','/停用','/群触发','/群上下文','/群接话','/群记忆','/状态','/重发','/管理员','/配置','/任务','/执行','/run','/agent','/能力','/开','/关','/关键词','/风格','/指令','/人格状态','/主动','/知识库','/应用'}
+ADMIN_COMMANDS={'/模型','/模型列表','/默认模型','/角色','/角色列表','/嘲讽','/记忆','/启用','/停用','/群触发','/群上下文','/群接话','/群记忆','/状态','/重发','/管理员','/配置','/任务','/执行','/run','/agent','/能力','/开','/关','/关键词','/风格','/指令','/人格状态','/主动','/知识库','/应用'}
 
 CAPABILITIES={'聊天':'chat','文件':'files','视频':'videos','B站转发':'video:bilibili',
               '小红书转发':'video:xiaohongshu','关键词':'keywords','语录':'quotes',
@@ -250,10 +250,16 @@ class LLM:
             s.close()
     def models(self):
         return sorted({x['id'] for x in self.request('/models').get('data',[]) if isinstance(x.get('id'),str)})
-    def chat(self,model,messages,max_tokens=None,mark_length=True):
+    def chat(self,model,messages,max_tokens=None,mark_length=True,sampling=None):
         # Deliberately no tools/functions, command execution or Agent client in any model request.
         tokens=max_tokens if isinstance(max_tokens,int) and max_tokens>0 else self.cfg.get('max_tokens',4096)
-        data=self.request('/chat/completions',{'model':model,'messages':messages,'stream':False,'max_tokens':tokens})
+        payload={'model':model,'messages':messages,'stream':False,'max_tokens':tokens}
+        if isinstance(sampling,dict):
+            # Optional, allow-listed sampling knobs (offline evaluation and future config); never forwarded blindly.
+            for key,(low,high) in {'temperature':(0.0,2.0),'top_p':(0.0,1.0),'presence_penalty':(-2.0,2.0),'frequency_penalty':(-2.0,2.0)}.items():
+                value=sampling.get(key)
+                if isinstance(value,(int,float)) and not isinstance(value,bool):payload[key]=min(high,max(low,float(value)))
+        data=self.request('/chat/completions',payload)
         choices=data.get('choices') or []
         if not choices:raise Rejected('模型没有返回答案')
         choice=choices[0];answer=choice.get('message',{}).get('content')
