@@ -146,7 +146,7 @@ def _validate(card, corpus, directory):
     if ooc is not None:
         if not isinstance(ooc, dict):
             raise RoleCardError(f'{directory.name}: ooc must be an object when present')
-        for name in ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow'):
+        for name in ('hard', 'service_tone', 'sweet_tone', 'care_tone', 'soft', 'soft_allow'):
             if name in ooc and not _string_list(ooc[name], allow_empty=True):
                 raise RoleCardError('{}: ooc.{} must be a string list when present'.format(directory.name, name))
     if not isinstance(corpus, dict) or not isinstance(corpus.get('categories'), dict):

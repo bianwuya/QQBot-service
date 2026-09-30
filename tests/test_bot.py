@@ -227,7 +227,7 @@ class PersonaSystem(Fixture):
         self.bot.llm.chat.return_value='诶？！'
         self.kw(text='瑟瑟 你真可爱')
         self.assertEqual(self.bot.store.get('g:33333','persona_state'),{'mode':'frail','left':3})
-        self.assertIn('脆弱态',self.prompt_of())
+        self.assertIn('得意态',self.prompt_of())
         for i in range(3):self.kw(text='瑟瑟')
         self.assertEqual(self.bot.store.get('g:33333','persona_state'),{'mode':'normal','left':0})
         self.kw(text='瑟瑟')

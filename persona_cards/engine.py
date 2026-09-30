@@ -41,7 +41,11 @@ def limit_for(role, intent=None):
 def output_instruction(role, intent=None):
     limit = limit_for(role, intent)
     base = str(role.reply_limits['instruction']).rstrip('。')
-    if limit <= 80:
+    leads = role.reply_limits.get('lead')
+    template = leads.get('short' if limit <= 80 else 'long') if isinstance(leads, dict) else None
+    if isinstance(template, str) and template.count('{}') == 1:
+        lead = template.format(limit)
+    elif limit <= 80:
         lead = '日常一两句、约30字内；解释技术或安抚情绪最多{}字，先答对再带口吻。'.format(limit)
     else:
         lead = '先答对再带口吻；当前情境最多{}字，复杂问题可分点说明。'.format(limit)
@@ -64,7 +68,7 @@ def behavior_block(role, intent=None):
     return current + ('\n其他情境索引：' + '；'.join(index) if index else '')
 
 
-_OOC_KEYS = ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow')
+_OOC_KEYS = ('hard', 'service_tone', 'sweet_tone', 'care_tone', 'soft', 'soft_allow')
 
 
 def _ooc_config(role):
@@ -113,6 +117,11 @@ def ooc_scan(role, text, intent=None):
         sweet = _regex_hit(config['sweet_tone'], text)
         if sweet:
             return {'retry': True, 'soft': False, 'kind': 'sweet_tone', 'matched': sweet}
+    # Decorative hearts are allowed in teasing, never in comfort or in answers to affection.
+    if intent in ('emotional', 'flirt'):
+        care = _regex_hit(config['care_tone'], text)
+        if care:
+            return {'retry': True, 'soft': False, 'kind': 'care_tone', 'matched': care}
     soft = next((word for word in config['soft'] if word and word in text), None)
     if soft and not _regex_hit(config['soft_allow'], text):
         return {'retry': False, 'soft': True, 'kind': 'soft', 'matched': soft}
@@ -121,6 +130,33 @@ def ooc_scan(role, text, intent=None):
 
 def ooc_check(role, text, intent=None):
     return bool(ooc_scan(role, text, intent)['retry'])
+
+
+_HEARTS = '♡♥❤'
+
+
+def soften_hearts(role, text, recent_replies=()):
+    """Heart cooldown: drop decorative hearts when a recent reply in the group already used one."""
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    style = data.get('style') if isinstance(data.get('style'), dict) else {}
+    cooldown = style.get('heart_cooldown')
+    if not isinstance(cooldown, int) or cooldown < 1 or not isinstance(text, str):
+        return text
+    if not any(ch in text for ch in _HEARTS):
+        return text
+    recent = [item for item in (recent_replies or ()) if isinstance(item, str)][-cooldown:]
+    if not any(ch in item for item in recent for ch in _HEARTS):
+        return text
+    cleaned = re.sub('[' + _HEARTS + '\\ufe0f]+', '', text)
+    cleaned = re.sub(r'[ \t]+(?=[~～，。！？!?])', '', cleaned)
+    cleaned = re.sub(r' {2,}', ' ', cleaned).strip()
+    return cleaned or text
+
+
+def retry_guidance(role):
+    data = role.data if isinstance(getattr(role, 'data', None), dict) else {}
+    custom = data.get('retry_guidance')
+    return custom.strip() if isinstance(custom, str) and custom.strip() else '保持当前角色的行为规则。'
 
 
 def ooc_prompt_words(role):
@@ -225,7 +261,9 @@ def build_prompt(role, state, relation, context):
         role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0))
     if (role.id == 'xiaozayu' and mode == role.states.get('trigger_mode')
             and context.get('intent') != 'flirt'):
-        state_label = ('刚才失过半拍，现在已收拾好场面：不要再结巴、脸红或撒娇；'
+        recovered = role.states.get('recovered_label')
+        state_label = (recovered if isinstance(recovered, str) and recovered.strip() else
+                       '刚才失过半拍，现在已收拾好场面：不要再结巴、脸红或撒娇；'
                        '先回应眼前的问题，轻松话题可嘴硬一句。')
     mood_line = str(context.get('mood_line', '')).strip()
     if mood_line:

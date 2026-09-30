@@ -29,7 +29,7 @@ class PersonaStateLayers(Fixture):
         self.assertEqual(reacts['22222'], {'mode': 'frail', 'left': 3})
         self.assertEqual(reacts['33333'], {'mode': 'normal', 'left': 0})
         self.assertIn('日常态', self.prompt_of())
-        self.assertNotIn('当前是脆弱态', self.prompt_of())
+        self.assertNotIn('当前是得意态', self.prompt_of())
 
     def test_group_mood_decays_after_two_replies(self):
         self.bot.llm.chat.return_value = '诶？！'
@@ -38,11 +38,11 @@ class PersonaStateLayers(Fixture):
         self.bot.llm.chat.return_value = '嗯。'
         self.kw(text='今天天气不错', user='33333', ident='mood-b')
         self.assertEqual(self.bot.store.get('g:33333', 'persona_mood:xiaozayu'), {'vibe': 'flustered', 'left': 1})
-        self.assertIn('耳朵还热着', self.prompt_of())
+        self.assertIn('还得意着', self.prompt_of())
         self.kw(text='嗯', user='44444', ident='mood-c')
         self.assertEqual(self.bot.store.get('g:33333', 'persona_mood:xiaozayu'), {'vibe': 'calm', 'left': 0})
         self.kw(text='嗯', user='44444', ident='mood-d')
-        self.assertNotIn('耳朵还热着', self.prompt_of())
+        self.assertNotIn('还得意着', self.prompt_of())
 
     def test_legacy_persona_state_migrates_to_owner_bucket(self):
         role = persona.XIAOZAYU

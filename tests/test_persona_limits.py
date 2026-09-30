@@ -15,7 +15,7 @@ from test_bot import Fixture
 class PersonaLimitTiers(unittest.TestCase):
     def test_xiaozayu_limit_for_intent(self):
         self.assertEqual(limit_for(persona.XIAOZAYU, 'tech_help'), 200)
-        self.assertEqual(limit_for(persona.XIAOZAYU, 'emotional'), 160)
+        self.assertEqual(limit_for(persona.XIAOZAYU, 'emotional'), 100)
         self.assertEqual(limit_for(persona.XIAOZAYU, 'chat'), 60)
         self.assertEqual(persona.reply_limit(persona.XIAOZAYU, 'tech_help'), 200)
         self.assertEqual(persona.reply_limit(persona.XIAOZAYU), 60)

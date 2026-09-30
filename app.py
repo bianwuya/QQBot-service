@@ -472,9 +472,7 @@ class Bot:
                 retry_messages=[dict(message) for message in messages]
                 retry_messages[0]['content'] += ('\n\n# 本次改写校准\n上一版回复不符合当前角色或为空。'
                     '重新回答用户这句话的具体内容；不要复述上一版，不要客服腔。'
-                    + ('小杂鱼不是傻白甜：不撒娇、不无端害羞、不用亲昵称呼；'
-                       '闲聊可抓一个具体破绽轻轻反击，正经求助优先把事讲清。'
-                       if role.id=='xiaozayu' else '保持当前角色的行为规则。'))
+                    + persona.retry_guidance(role))
                 answer=(self.vision.chat(self.config_loader(),retry_messages,vision_images,max_tokens=budget,
                                          preferred_model=self.model(scope))
                         if vision_images is not None else
@@ -508,6 +506,7 @@ class Bot:
                             answer=fresh.text;actions=alternate_actions
                     except Rejected:
                         pass  # Keep the already valid first reply, never pay a third time.
+                answer=persona.soften_hearts(answer,role,recent_replies)
                 if persona.ooc_scan(answer,role,intent)['soft']:self.persona_metric(scope,'ooc_soft')
             else:
                 actions=[];self.persona_metric(scope,'fallback')

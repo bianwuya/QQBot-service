@@ -20,8 +20,10 @@ from persona_cards import (RoleCard, begin_turn as _begin_turn,
                            relation_level as _relation_level,
                            reply_limit as _reply_limit,
                            resolve_role as _resolve_role,
+                           retry_guidance as _retry_guidance,
                            save_runtime as _save_runtime,
-                           selection_scope, touch as _touch,
+                           selection_scope, soften_hearts as _soften_hearts,
+                           touch as _touch,
                            trigger_hit as _trigger_hit)
 
 
@@ -79,6 +81,14 @@ def ooc_check(text, role=None, intent=None):
 
 def ooc_scan(text, role=None, intent=None):
     return _ooc_scan(role or XIAOZAYU, text, intent)
+
+
+def retry_guidance(role=None):
+    return _retry_guidance(role or XIAOZAYU)
+
+
+def soften_hearts(text, role=None, recent_replies=()):
+    return _soften_hearts(role or XIAOZAYU, text, recent_replies)
 
 
 def fallback_line(used, role=None, intent=None):
