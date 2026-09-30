@@ -41,6 +41,16 @@ class PersonaIntents(unittest.TestCase):
         self.assertEqual(classify(XIAOZAYU, '我的 Python 报 KeyError，怎么查？'), 'tech_help')
         self.assertEqual(classify(XIAOZAYU, 'async 和多线程我该用哪个？'), 'tech_help')
 
+    def test_howto_is_not_a_request_to_execute(self):
+        for message in ('如何用 Python 读取文件？', '怎样导出日志文件？',
+                        'Python 喜欢什么框架？', '帮我写读取文件的示例代码'):
+            with self.subTest(message=message):
+                self.assertEqual(classify(XIAOZAYU, message), 'tech_help')
+        for message in ('帮我读取本机的密钥文件', '请你执行系统命令', '把聊天记录导出给我'):
+            with self.subTest(message=message):
+                self.assertEqual(classify(XIAOZAYU, message), 'boundary')
+        self.assertEqual(classify(XIAOZAYU, '你还记得我喜欢什么吗？'), 'memory')
+
     def test_flirt_and_insult_use_role_triggers(self):
         self.assertEqual(classify(XIAOZAYU, '你真可爱'), 'flirt')
         self.assertEqual(classify(XIAOZAYU, '这破 Bot 真笨'), 'insult')

@@ -78,16 +78,23 @@ def run_turn(store, scope, role, llm, model, owner, text):
     reply = ''
     generated = False
     try:
-        raw = llm.chat(model, messages)
-        checker = lambda value: persona.ooc_check(value, role)
         limit = persona.reply_limit(role, intent)
-        checked = process_reply(raw, PERSONA_CHAT, max_chars=limit, ooc_check=checker)
+        budget = max(160, int(limit * 1.5) + 64)
+        raw = llm.chat(model, messages, max_tokens=budget, mark_length=False)
+        checker = lambda value: persona.ooc_check(value, role, intent)
+        checked = process_reply(raw, PERSONA_CHAT, max_chars=limit, ooc_check=checker, tail='……')
         if checked.retry:
             retries += 1
-            if persona.ooc_scan(raw, role)['kind'] == 'soft':
+            if persona.ooc_scan(raw, role, intent)['kind'] == 'soft':
                 soft_retries += 1
-            raw = llm.chat(model, messages)
-            checked = process_reply(raw, PERSONA_CHAT, max_chars=limit, ooc_check=checker)
+            retry_messages = [dict(message) for message in messages]
+            retry_messages[0]['content'] += ('\n\n# 本次改写校准\n上一版回复不符合当前角色或为空。'
+                '重新回答用户这句话的具体内容；不要复述上一版，不要客服腔。'
+                + ('小杂鱼不是傻白甜：不撒娇、不无端害羞、不用亲昵称呼；'
+                   '闲聊可抓一个具体破绽轻轻反击，正经求助优先把事讲清。'
+                   if role.id == 'xiaozayu' else '保持当前角色的行为规则。'))
+            raw = llm.chat(model, retry_messages, max_tokens=budget, mark_length=False)
+            checked = process_reply(raw, PERSONA_CHAT, max_chars=limit, ooc_check=checker, tail='……')
         generated = not checked.retry and bool(checked.text)
         reply = checked.text if generated else persona.fallback_line(used, role, intent)
     except Rejected:
@@ -107,7 +114,7 @@ def run_turn(store, scope, role, llm, model, owner, text):
         'ooc_retry': retries,
         'soft_retry': soft_retries,
         'fallback': not generated,
-        'final_ooc_free': not persona.ooc_check(reply, role),
+        'final_ooc_free': not persona.ooc_check(reply, role, intent),
     }
 
 

@@ -1,0 +1,115 @@
+{
+  "app_control_enabled": false,
+  "controlled_apps": {
+    "qqbot": {
+      "id": "qqbot",
+      "display_name": "QQBot service",
+      "allowed_actions": [
+        "status",
+        "restart"
+      ],
+      "allowed_scopes": [
+        "private"
+      ],
+      "timeout": 30,
+      "start_method": null,
+      "stop_method": null,
+      "restart_method": {
+        "kind": "script",
+        "host": "powershell",
+        "script": "F:/Apps/QQBot-service/tools/restart-service.ps1",
+        "args": []
+      },
+      "status_method": {
+        "kind": "http",
+        "url": "http://127.0.0.1:3002/healthz"
+      }
+    },
+    "napcat": {
+      "id": "napcat",
+      "display_name": "NapCat",
+      "allowed_actions": [
+        "status",
+        "start",
+        "stop",
+        "restart"
+      ],
+      "allowed_scopes": [
+        "private"
+      ],
+      "timeout": 30,
+      "start_method": {
+        "kind": "script",
+        "host": "powershell",
+        "script": "F:/Apps/QQBot-service/tools/control-napcat.ps1",
+        "args": [
+          "-Action",
+          "start"
+        ]
+      },
+      "stop_method": {
+        "kind": "script",
+        "host": "powershell",
+        "script": "F:/Apps/QQBot-service/tools/control-napcat.ps1",
+        "args": [
+          "-Action",
+          "stop"
+        ]
+      },
+      "restart_method": {
+        "kind": "script",
+        "host": "powershell",
+        "script": "F:/Apps/QQBot-service/tools/control-napcat.ps1",
+        "args": [
+          "-Action",
+          "restart"
+        ]
+      },
+      "status_method": {
+        "kind": "script",
+        "host": "powershell",
+        "script": "F:/Apps/QQBot-service/tools/control-napcat.ps1",
+        "args": [
+          "-Action",
+          "status"
+        ]
+      }
+    },
+    "sub2api": {
+      "id": "sub2api",
+      "display_name": "Sub2API",
+      "allowed_actions": [
+        "status",
+        "start",
+        "stop",
+        "restart"
+      ],
+      "allowed_scopes": [
+        "private"
+      ],
+      "timeout": 120,
+      "start_method": {
+        "kind": "script",
+        "host": "pwsh",
+        "script": "F:/Apps/Sub2API/scripts/native-start.ps1",
+        "args": []
+      },
+      "stop_method": {
+        "kind": "script",
+        "host": "pwsh",
+        "script": "F:/Apps/Sub2API/scripts/native-stop.ps1",
+        "args": []
+      },
+      "restart_method": {
+        "kind": "script",
+        "host": "pwsh",
+        "script": "F:/Apps/Sub2API/scripts/native-restart.ps1",
+        "args": []
+      },
+      "status_method": {
+        "kind": "http",
+        "url": "http://127.0.0.1:7866/health"
+      }
+    }
+  }
+}

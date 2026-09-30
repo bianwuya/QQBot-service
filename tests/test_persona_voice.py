@@ -55,8 +55,10 @@ class PersonaTruncationTail(unittest.TestCase):
 class XiaozayuRebuild(unittest.TestCase):
     def setUp(self):
         base = 'persona_cards/roles/xiaozayu/'
-        self.card = json.load(open(base + 'card.json', encoding='utf-8'))
-        self.corpus = json.load(open(base + 'corpus.json', encoding='utf-8'))
+        with open(base + 'card.json', encoding='utf-8') as handle:
+            self.card = json.load(handle)
+        with open(base + 'corpus.json', encoding='utf-8') as handle:
+            self.corpus = json.load(handle)
 
     def test_core_is_three_layer_and_faithful(self):
         core = self.card['core']

@@ -5,7 +5,24 @@ import time
 
 def trigger_hit(role, trigger_name, text):
     text = text or ''
-    return next((word for word in role.triggers.get(trigger_name, []) if word in text), None)
+    triggers = getattr(role, 'triggers', None)
+    if triggers is None:
+        data = getattr(role, 'data', {}) or {}
+        triggers = data.get('triggers', {}) if isinstance(data, dict) else {}
+    if not isinstance(triggers, dict):
+        return None
+    for word in triggers.get(trigger_name, []):
+        if not isinstance(word, str) or not word or word not in text:
+            continue
+        if getattr(role, 'id', None) == 'xiaozayu' and trigger_name == 'flirt':
+            # Third-person or negated remarks are not praise addressed to her.
+            if word in ('喜欢你', '爱你') and re.search(
+                    r'(?:不|没|他|她|别人|谁).{0,2}' + re.escape(word), text):
+                continue
+            if word == '喜欢你' and re.search(r'喜欢你(?:的|写|做|提|这|那)', text):
+                continue
+        return word
+    return None
 
 
 def limit_for(role, intent=None):
@@ -47,7 +64,7 @@ def behavior_block(role, intent=None):
     return current + ('\n其他情境索引：' + '；'.join(index) if index else '')
 
 
-_OOC_KEYS = ('hard', 'service_tone', 'soft', 'soft_allow')
+_OOC_KEYS = ('hard', 'service_tone', 'sweet_tone', 'soft', 'soft_allow')
 
 
 def _ooc_config(role):
@@ -81,7 +98,7 @@ def _regex_hit(patterns, text):
     return None
 
 
-def ooc_scan(role, text):
+def ooc_scan(role, text, intent=None):
     text = text or ''
     config = _ooc_config(role)
     for word in config['hard']:
@@ -90,14 +107,20 @@ def ooc_scan(role, text):
     service = _regex_hit(config['service_tone'], text)
     if service:
         return {'retry': True, 'soft': False, 'kind': 'service_tone', 'matched': service}
+    # Care is intentionally warmer; a role's sugary-voice rules must not
+    # discard a genuine supportive answer just for being gentle.
+    if intent not in ('emotional', 'boundary'):
+        sweet = _regex_hit(config['sweet_tone'], text)
+        if sweet:
+            return {'retry': True, 'soft': False, 'kind': 'sweet_tone', 'matched': sweet}
     soft = next((word for word in config['soft'] if word and word in text), None)
     if soft and not _regex_hit(config['soft_allow'], text):
         return {'retry': False, 'soft': True, 'kind': 'soft', 'matched': soft}
     return {'retry': False, 'soft': False, 'kind': None, 'matched': None}
 
 
-def ooc_check(role, text):
-    return bool(ooc_scan(role, text)['retry'])
+def ooc_check(role, text, intent=None):
+    return bool(ooc_scan(role, text, intent)['retry'])
 
 
 def ooc_prompt_words(role):
@@ -117,15 +140,37 @@ def fallback_line(role, used, intent=None):
     return next((line for line in pool if line not in used), pool[0])
 
 
-def _pick(role, category, used, count):
+def _pick(role, category, used, count, variation=0):
     source = role.corpus['categories'].get(category, [])
     pool = [line for line in source if line not in used] or source
+    if pool and isinstance(variation, int):
+        shift = variation % len(pool)
+        pool = pool[shift:] + pool[:shift]
     return pool[:count]
 
 
-def examples_for(role, mode, used, intent=None, identity_path=None):
+_TASK_INTENTS = frozenset(('tech_help', 'emotional', 'identity', 'memory',
+                           'correction', 'boundary', 'unclear'))
+
+
+def examples_for(role, mode, used, intent=None, identity_path=None, variation=0):
+    # Identity probes rely on stable deflect/admit exemplars; keep those fixed.
+    if intent == 'identity':
+        variation = 0
     plans = role.corpus.get('plans', {})
     plan = plans.get(mode) or plans.get(role.states['default']) or []
+    # A generic mood plan used to leak cheerful/bragging examples into every
+    # task. Only playful chat/greetings/flirt/insults need those examples.
+    if intent in _TASK_INTENTS:
+        plan = []
+    elif role.id == 'xiaozayu' and intent == 'greeting':
+        # A plain hello supplies no premise to attack; do not hallucinate a
+        # previous exchange just because the generic chat plan suggests one.
+        plan = [['daily', 1]]
+    elif mode == role.states.get('trigger_mode') and intent != 'flirt' and role.id == 'xiaozayu':
+        # After the actual compliment, keep a trace of embarrassment without
+        # feeding the model two more rounds of blush-and-stammer examples.
+        plan = [['recover', 1], ['provocation', 1]]
     intent_plans = role.corpus.get('intent_plans', {})
     intent_plan = intent_plans.get(intent) if isinstance(intent, str) else None
     if intent == 'identity' and identity_path in ('deflect', 'admit'):
@@ -136,7 +181,7 @@ def examples_for(role, mode, used, intent=None, identity_path=None):
         if not isinstance(entry, list) or len(entry) != 2:
             continue
         category, count = entry
-        chosen += _pick(role, category, used+chosen, max(0, int(count)))
+        chosen += _pick(role, category, used+chosen, max(0, int(count)), variation+len(chosen) if isinstance(variation,int) else 0)
     state = role.states.get('modes', {}).get(mode) or role.states['modes'][role.states['default']]
     return state['label'], '\n'.join('· '+line for line in chosen), chosen
 
@@ -177,12 +222,18 @@ def build_prompt(role, state, relation, context):
     if mode not in role.states['modes']:
         mode = role.states['default']
     state_label, corpus_block, chosen = examples_for(
-        role, mode, used, context.get('intent'), context.get('identity_path'))
+        role, mode, used, context.get('intent'), context.get('identity_path'), context.get('variation_seed', 0))
+    if (role.id == 'xiaozayu' and mode == role.states.get('trigger_mode')
+            and context.get('intent') != 'flirt'):
+        state_label = ('刚才失过半拍，现在已收拾好场面：不要再结巴、脸红或撒娇；'
+                       '先回应眼前的问题，轻松话题可嘴硬一句。')
     mood_line = str(context.get('mood_line', '')).strip()
     if mood_line:
         state_label += '\n'+mood_line
+    count = relation.get('n', 0)
     memory = '互动次数：{}｜亲密度：{}｜最后见面：{}'.format(
-        relation.get('n', 0), relation_level(role, relation.get('a', 0)), relation.get('last') or '初次')
+        count, relation_level(role, relation.get('a', 0)),
+        relation.get('last') if count > 1 and relation.get('last') else '初次')
     values = {
         'display_name': role.display_name,
         'identity': role.data['identity'],

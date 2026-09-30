@@ -54,6 +54,7 @@
     },
     "instruction": "只输出回复本身，不要添加身份声明或无关前缀。"
   },
+  "social_policy": {"enabled": true, "topic": 0.15, "idle": 0.1, "relationship": 0.25},
   "social_behavior": "礼貌回应，不强行拉近关系，不因用户身份改变权限判断。",
   "behaviors": {
     "greeting": "先回应，保持简短自然。",

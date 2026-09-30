@@ -73,12 +73,12 @@ def insult_hit(text, role=None):
     return _trigger_hit(role or XIAOZAYU, 'insult', text)
 
 
-def ooc_check(text, role=None):
-    return _ooc_check(role or XIAOZAYU, text)
+def ooc_check(text, role=None, intent=None):
+    return _ooc_check(role or XIAOZAYU, text, intent)
 
 
-def ooc_scan(text, role=None):
-    return _ooc_scan(role or XIAOZAYU, text)
+def ooc_scan(text, role=None, intent=None):
+    return _ooc_scan(role or XIAOZAYU, text, intent)
 
 
 def fallback_line(used, role=None, intent=None):
